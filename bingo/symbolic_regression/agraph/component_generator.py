@@ -7,7 +7,11 @@ operators, terminals, and their associated parameters.
 import logging
 import numpy as np
 
+from copy import deepcopy
+from sympy.core import Expr
+
 from .operator_definitions import OPERATOR_NAMES
+from .string_parsing import sympy_string_to_command_array_and_constants
 from ...util.probability_mass_function import ProbabilityMassFunction
 from ...util.argument_validation import argument_validation
 
@@ -37,9 +41,13 @@ class ComponentGenerator:
     @argument_validation(input_x_dimension={">=": 0},
                          num_initial_load_statements={">=": 1},
                          terminal_probability={">=": 0.0, "<=": 1.0},
+                         operator_probability={">=": 0.0, "<=": 1.0},
+                         equation_probability={">=": 0.0, "<=": 1.0},
                          constant_probability={">=": 0.0, "<=": 1.0})
     def __init__(self, input_x_dimension, num_initial_load_statements=1,
                  terminal_probability=0.1,
+                 operator_probability=0.9,
+                 equation_probability=0.0,
                  constant_probability=None):
 
         self.input_x_dimension = input_x_dimension
@@ -47,8 +55,15 @@ class ComponentGenerator:
 
         self._terminal_pmf = self._make_terminal_pdf(constant_probability)
         self._operator_pmf = ProbabilityMassFunction()
+        self._equation_pmf = ProbabilityMassFunction()
+        self._full_random_command_function_pmf = \
+            self._make_random_command_pmf(terminal_probability,
+                                          operator_probability,
+                                          equation_probability)
         self._random_command_function_pmf = \
-            self._make_random_command_pmf(terminal_probability)
+            self._make_random_command_pmf(terminal_probability,
+                                          operator_probability,
+                                          0)
 
     def _make_terminal_pdf(self, constant_probability):
         if constant_probability is None:
@@ -58,11 +73,14 @@ class ComponentGenerator:
                                1.0 - constant_probability]
         return ProbabilityMassFunction(items=[1, 0], weights=terminal_weight)
 
-    def _make_random_command_pmf(self, terminal_probability):
+    def _make_random_command_pmf(self, terminal_probability,
+                                 operator_probability, equation_probability):
         command_weights = [terminal_probability,
-                           1.0 - terminal_probability]
+                           operator_probability,
+                           equation_probability]
         return ProbabilityMassFunction(items=[self.random_terminal_command,
-                                              self.random_operator_command],
+                                              self.random_operator_command,
+                                              self.random_equation],
                                        weights=command_weights)
 
     def add_operator(self, operator_to_add, operator_weight=None):
@@ -83,6 +101,32 @@ class ComponentGenerator:
             operator_number = operator_to_add
 
         self._operator_pmf.add_item(operator_number, operator_weight)
+
+    def add_equation(self, equation_to_add, equation_weight=None):
+        """Add an equation to the set of possible equations
+
+        Parameters
+        ----------
+        equation_to_add : str, sympy expr, command_arr
+            either a command array, sympy str, or sympy expression of
+            the equation to add
+        equation_weight : number
+            relative weight of equation probability
+        """
+
+        # string or sympy expression, need to turn into a command array
+        if isinstance(equation_to_add, str) \
+                or isinstance(equation_to_add, Expr):
+            if isinstance(equation_to_add, str):
+                sympy_str = \
+                    equation_to_add.replace("^", "**").replace(")(", ")*(")
+            else:  # Expr
+                sympy_str = str(equation_to_add)
+
+            equation_to_add, _ = \
+                sympy_string_to_command_array_and_constants(sympy_str)
+
+        self._equation_pmf.add_item(equation_to_add, equation_weight)
 
     @staticmethod
     def _get_operator_number_from_string(operator_string):
@@ -108,6 +152,33 @@ class ComponentGenerator:
         if stack_location < self._num_initial_load_statements:
             return self.random_terminal_command(stack_location)
         return self._random_command_function_pmf.draw_sample()(stack_location)
+
+    def random_command_w_eq(self, stack_location):
+        """Get a random command with equations
+
+        Parameters
+        ----------
+        stack_location : int
+            location in the stack for the command
+
+        Returns
+        -------
+        array of array of int
+            a random command in the form [[node, parameter 1, parameter 2]]
+            or
+            a random equation in the form
+                [[node, parameter 1, parameter 2],
+                [node, parameter 1, parameter 2],
+                ...]
+
+        """
+        if stack_location < self._num_initial_load_statements:
+            return self.random_terminal_command(stack_location)
+        command = self._full_random_command_function_pmf.draw_sample()(stack_location)
+        if len(command.shape) == 1:
+            command = np.array([command])
+        return command
+
 
     def random_operator_command(self, stack_location):
         """Get a random operator (non-terminal) command
@@ -205,6 +276,24 @@ class ComponentGenerator:
         else:
             param = -1
         return param
+
+    @staticmethod
+    def _shift_command_array(cmd_arr, stack_location):
+        """Shift indices of command array to start at
+        stack_location instead of 0"""
+        new_cmd_arr = deepcopy(cmd_arr)
+        operator_idx = np.logical_and.reduce((new_cmd_arr[:, 0] != -1,
+                                              new_cmd_arr[:, 0] != 0,
+                                              new_cmd_arr[:, 0] != 1))
+    
+        # add stack_location to the params of operator commands
+        new_cmd_arr[operator_idx] = new_cmd_arr[operator_idx] + \
+                                np.array([0, stack_location, stack_location])
+        return new_cmd_arr
+
+    def random_equation(self, stack_location):
+        command_array = self._equation_pmf.draw_sample()
+        return self._shift_command_array(command_array, stack_location)
 
     def get_number_of_terminals(self):
         """Gets number of possible terminals

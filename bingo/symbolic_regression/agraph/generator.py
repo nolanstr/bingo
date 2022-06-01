@@ -63,6 +63,20 @@ class AGraphGenerator(Generator):
 
     def _create_command_array(self):
         command_array = np.empty((self.agraph_size, 3), dtype=int)
-        for i in range(self.agraph_size):
-            command_array[i] = self.component_generator.random_command(i)
+        commands_to_generate = self.agraph_size
+        i = 0
+        while commands_to_generate > 0:
+            new_command = self.component_generator.random_command_w_eq(i)
+
+            attempts = 0
+            while commands_to_generate < new_command.shape[0]:
+                if attempts > 99:
+                    raise RuntimeError(
+                        "Couldn't generate small enough agraph command")
+                attempts += 1
+                new_command = self.component_generator.random_command_w_eq(i)
+
+            command_array[i:i+new_command.shape[0]] = new_command
+            commands_to_generate -= new_command.shape[0]
+            i += new_command.shape[0]
         return command_array
