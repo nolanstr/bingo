@@ -6,11 +6,13 @@ from bingo.local_optimizers.continuous_local_opt import ContinuousLocalOptimizat
 from bingo.symbolic_regression.agraph.agraph import AGraph
 from bingo.symbolic_regression.agraph.component_generator import ComponentGenerator
 from bingo.symbolic_regression.agraph.generator import AGraphGenerator
+from bingo.symbolic_regression.agraph.operator_definitions import \
+    IS_ARITY_2_MAP, IS_TERMINAL_MAP
 from bingo.symbolic_regression.explicit_regression import ExplicitTrainingData, ExplicitRegression
 
 
 def default_component_generator(n_xs):
-    components = {"+", "-", "/", "*"}
+    components = {"+", "-", "/", "*", "sin", "cos"}
 
     component_generator = ComponentGenerator(n_xs)
     for component in components:
@@ -35,17 +37,15 @@ def get_equation_data(true_equation, n, n_xs):
     return X, y
 
 
-terminals = {-1, 0, 1}
-
-
 def get_utilized_idx(cmd_arr, current_idx=None):
     if current_idx is None:
         current_idx = len(cmd_arr) - 1
     utilized_idx = {current_idx}
     current_cmd = cmd_arr[current_idx]
-    if current_cmd[0] not in terminals:
+    if not IS_TERMINAL_MAP[current_cmd[0]]:
         utilized_idx.update(get_utilized_idx(cmd_arr, current_cmd[1]))
-        utilized_idx.update(get_utilized_idx(cmd_arr, current_cmd[2]))
+        if IS_ARITY_2_MAP[current_cmd[0]]:
+            utilized_idx.update(get_utilized_idx(cmd_arr, current_cmd[2]))
     return utilized_idx
 
 
@@ -95,7 +95,7 @@ def get_valid_equation_row(eq_size, component_generator, n_data, n_xs):
 
 
 if __name__ == '__main__':
-    STACK_SIZE = 40
+    STACK_SIZE = 16
 
     n_equations = 100
     n_datapoints = 1000
@@ -122,4 +122,3 @@ if __name__ == '__main__':
     file_name = f"{n_datapoints}_points_{n_equations}_eq_{STACK_SIZE}_stack"
     df.to_csv(directory_name + "/" + file_name + ".csv")
     df.to_pickle(directory_name + "/" + file_name + ".pkl")
-

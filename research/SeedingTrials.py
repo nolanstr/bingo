@@ -1,7 +1,10 @@
 import json
 import logging
+import numpy as np
 import os
 import pandas as pd
+import sys
+sys.path.append("C:/Users/David/Desktop/GPSR Research/bingoNASAFork")
 
 from sklearn.model_selection import train_test_split
 
@@ -69,28 +72,29 @@ def run_trial(hyperparams, log_dir, X, y):
     evo_opt.evolve_until_convergence(
         max_generations=hyperparams.get("MAX_GENERATIONS", 1e6),
         fitness_threshold=hyperparams.get("FITNESS_THRESHOLD", 1e-6),
-        convergence_check_frequency=10,
+        convergence_check_frequency=50,
         checkpoint_base_name=log_dir + "/checkpoint")
 
 
-def setup_logging(method_name, hyperparam_dict, trial_n):
-    directory_name = f"output/{method_name}/trial_{trial_n}"
+def setup_logging(log_directory, hyperparam_dict, dataset_i):
+    if not os.path.exists(log_directory):
+        os.makedirs(log_directory)
 
-    if not os.path.exists(directory_name):
-        os.makedirs(directory_name)
-
-    with open(directory_name + "/hyperparams.json", "w") as f:
+    with open(log_directory + "/hyperparams.json", "w") as f:
         json.dump(hyperparam_dict, f)
 
-    logging.basicConfig(filename=f"{directory_name}/trial_{trial_n}.log",
+    logging.basicConfig(filename=f"{log_directory}/dataset_{dataset_i}.log",
                         filemode="w+", level=logging.INFO)
-
-    return directory_name
 
 
 if __name__ == '__main__':
+    if not os.path.exists("E:/GPSRResearchEDrive/seeding_research"):
+        raise RuntimeError("output directory (E:/GPSRResearchEDrive/seeding_research) doesn't exist, most likely Linux/Windows issue")
+
+    df = pd.read_pickle("data/1000_points_100_eq_16_stack.pkl")
+
     HYPERPARAMS = {
-        "STACK_SIZE": 64,
+        "STACK_SIZE": 16,
         "POPULATION_SIZE": 100,
 
         "MAX_GENERATIONS": int(1e8),
@@ -106,16 +110,24 @@ if __name__ == '__main__':
         "OPERATORS": ["+", "-", "*", "/", "sin", "cos"],
         "SEEDS": [],
 
-        "TRAIN_PERCENT": 0.75
+        "TRAIN_PERCENT": 0.75,
+        "SAMPLE_SIZE": 10,
+        "METHOD_NAME": "no_seeding",
     }
-    trial_number = 0
+    method_name = HYPERPARAMS["METHOD_NAME"]
+    sample_size = HYPERPARAMS.get("SAMPLE_SIZE", 10)
 
-    log_dir = setup_logging("no_seeding/", HYPERPARAMS,
-                            trial_number)
-
-    df = pd.read_pickle("data/1000_points_100_eq_40_stack.pkl")
-    row = df.iloc[0]
-    X, y = row["true_X"], row["true_y"]
-    train_X, test_X, train_y, test_y = \
-        train_test_split(X, y, train_size=HYPERPARAMS.get("TRAIN_PERCENT", 0.75))
-    run_trial(HYPERPARAMS, log_dir, train_X, train_y)
+    print("method:", method_name, end="\n\n")
+    for i, row in df.iterrows():
+        print("dataset:", i)
+        HYPERPARAMS["train_test_split_seed"] = np.random.randint(1000)
+        X, y = row["true_X"], row["true_y"]
+        train_X, test_X, train_y, test_y = \
+            train_test_split(X, y,
+                             train_size=HYPERPARAMS.get("TRAIN_PERCENT", 0.75),
+                             random_state=HYPERPARAMS["train_test_split_seed"])
+        for sample_i in range(sample_size):
+            print("\t sample:", sample_i)
+            log_dir = f"E:/GPSRResearchEDrive/seeding_research/output/{method_name}/dataset_{i}/sample_{sample_i}"
+            setup_logging(log_dir, HYPERPARAMS, i)
+            run_trial(HYPERPARAMS, log_dir, train_X, train_y)
