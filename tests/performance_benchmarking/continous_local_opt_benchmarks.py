@@ -3,10 +3,12 @@ import timeit
 import numpy as np
 
 from bingo.symbolic_regression.agraph \
-    import agraph as agraph_module, backend as pyBackend
+    import agraph as agraph_module
+from bingo.symbolic_regression.agraph.evaluation_backend import \
+    evaluation_backend as pyBackend
 from bingo.local_optimizers.continuous_local_opt \
     import ContinuousLocalOptimization
-from bingocpp.build import bingocpp as cppBackend
+from bingocpp import evaluation_backend as cppBackend
 
 from benchmark_data import StatsPrinter, \
                            generate_random_individuals, \
@@ -104,7 +106,7 @@ def do_benchmarking(debug = False):
         [benchmark_explicit_regression_with_optimization,
          benchmark_explicit_regression_cpp_with_optimization,
          "LOCAL OPTIMIZATION (EXPLICIT REGRESSION) BENCHMARKS"],
-        [benchmark_implicit_regression_with_optimization, 
+        [benchmark_implicit_regression_with_optimization,
          benchmark_implicit_regression_cpp_with_optimization,
          "LOCAL OPTIMIZATION (IMPLICIT REGRESSION) BENCHMARKS"]]
 
@@ -119,7 +121,7 @@ def do_benchmarking(debug = False):
 
 def _run_benchmarks(printer, regression, regression_cpp):
     for backend, name in [[pyBackend, " py"], [cppBackend, "c++"]]:
-        agraph_module.Backend = backend
+        agraph_module.evaluation_backend = backend
         _add_stats_and_log_intermediate_steps(
             printer,
             regression,

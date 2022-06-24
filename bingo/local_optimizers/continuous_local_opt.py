@@ -8,9 +8,10 @@ to use the functionality.
 from abc import ABCMeta, abstractmethod
 
 import numpy as np
-import scipy.optimize as optimize
+from scipy import optimize
 
-from ..evaluation.fitness_function import FitnessFunction, VectorBasedFunction
+from ..evaluation.fitness_function import FitnessFunction
+from ..evaluation.gradient_mixin import GradientMixin, VectorGradientMixin
 
 ROOT_SET = {
     # 'hybr',
@@ -32,7 +33,7 @@ MINIMIZE_SET = {
     'BFGS',
     # 'Newton-CG',
     'L-BFGS-B',
-    # 'TNC',
+    'TNC',
     # 'COBYLA',
     'SLSQP'
     # 'trust-constr'
@@ -42,12 +43,28 @@ MINIMIZE_SET = {
     # 'trust-krylov'
 }
 
+JACOBIAN_SET = {
+    'CG',
+    'BFGS',
+    # 'Newton-CG',
+    'L-BFGS-B',
+    'TNC',
+    'SLSQP',
+    # 'trust-constr'
+    # 'dogleg',
+    # 'trust-ncg',
+    # 'trust-exact',
+    # 'trust-krylov',
+    # 'hybr',
+    'lm'
+}
+
 
 class ContinuousLocalOptimization(FitnessFunction):
     """Fitness evaluation metric for individuals.
 
-    A class for the fitness evaluation metric of genetic individuals that may or
-    may not need local optimization before evaluation.
+    A class for the fitness evaluation metric of genetic individuals that may
+    or may not need local optimization before evaluation.
 
     Parameters
     ----------
@@ -66,7 +83,7 @@ class ContinuousLocalOptimization(FitnessFunction):
                 - BFGS
                 - Newton-CG (not available yet)
                 - L-BFGS-B
-                - TNC (not available yet)
+                - TNC
                 - COBYLA (not available yet)
                 - SLSQP
                 - trust-constr (not available yet)
@@ -89,11 +106,10 @@ class ContinuousLocalOptimization(FitnessFunction):
     Attributes
     ----------
     eval_count : int
-                 the number of evaluations that have been performed by the
-                 wrapped fitness function
+        the number of evaluations that have been performed by the wrapped
+        fitness function
     training_data :
-                   (Optional) data that can be used in the wrapped fitness
-                   function
+        (Optional) data that can be used in the wrapped fitness function
 
     Raises
     ------
@@ -155,35 +171,55 @@ class ContinuousLocalOptimization(FitnessFunction):
 
     @staticmethod
     def _check_root_alg_returns_vector(fitness_function, algorithm):
-        if algorithm in ROOT_SET and not isinstance(fitness_function,
-                                                    VectorBasedFunction):
+        if algorithm in ROOT_SET and not hasattr(fitness_function,
+                                                 'evaluate_fitness_vector'):
             raise TypeError("{} requires VectorBasedFunction\
                             as a fitness function".format(algorithm))
 
     def _optimize_params(self, individual):
         num_params = individual.get_number_local_optimization_params()
-        c_0 = np.random.uniform(-10000, 10000, num_params)
+        #changed c_0 to be more accurate to model params for beam bending
+        c_0 = np.random.uniform(-1, 1, num_params)
         params = self._run_algorithm_for_optimization(
             self._sub_routine_for_fit_function, individual, c_0)
         individual.set_local_optimization_params(params)
 
     def _sub_routine_for_fit_function(self, params, individual):
         individual.set_local_optimization_params(params)
+
         if self._algorithm in ROOT_SET:
             return self._fitness_function.evaluate_fitness_vector(individual)
         return self._fitness_function(individual)
 
     def _run_algorithm_for_optimization(self, sub_routine, individual, params):
         if self._algorithm in ROOT_SET:
-            optimize_result = optimize.root(sub_routine, params,
-                                            args=(individual),
-                                            method=self._algorithm,
-                                            tol=1e-6)
-        else:
-            optimize_result = optimize.minimize(sub_routine, params,
+            if isinstance(self._fitness_function, VectorGradientMixin) \
+                    and self._algorithm in JACOBIAN_SET:
+                optimize_result = optimize.root(
+                        sub_routine, params,
+                        args=(individual, ),
+                        jac=lambda x, indv: self._fitness_function.get_fitness_vector_and_jacobian(indv)[1],  # pylint: disable=line-too-long
+                        method=self._algorithm,
+                        tol=1e-6)
+            else:
+                optimize_result = optimize.root(sub_routine, params,
                                                 args=(individual),
                                                 method=self._algorithm,
                                                 tol=1e-6)
+        else:
+            if isinstance(self._fitness_function, GradientMixin) \
+                    and self._algorithm in JACOBIAN_SET:
+                optimize_result = optimize.minimize(
+                        sub_routine, params,
+                        args=(individual, ),
+                        jac=lambda x, indv: self._fitness_function.get_fitness_and_gradient(indv)[1],  # pylint: disable=line-too-long
+                        method=self._algorithm,
+                        tol=1e-6)
+            else:
+                optimize_result = optimize.minimize(sub_routine, params,
+                                                    args=(individual, ),
+                                                    method=self._algorithm,
+                                                    tol=1e-6)
         return optimize_result.x
 
     def _evaluate_fitness(self, individual):
@@ -226,5 +262,15 @@ class ChromosomeInterface(metaclass=ABCMeta):
         ----------
         params : list-like of numeric
                  Values to set the parameters
+        """
+        raise NotImplementedError
+
+    @abstractmethod
+    def get_local_optimization_params(self):
+        """get local optimization parameters
+
+        Returns
+        -------
+        list
         """
         raise NotImplementedError

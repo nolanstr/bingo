@@ -71,29 +71,7 @@ class Equation(Chromosome, metaclass=ABCMeta):
         -------
         tuple(Mx1 array of numeric, MxL array of numeric)
             :math:`f(x)` and :math:`df(x)/dc_i`. L is the number of
-            optimization parameters.
-        """
-        raise NotImplementedError
-
-    @abstractmethod
-    def get_latex_string(self):
-        """Latex conversion of individual
-
-        Returns
-        -------
-        str
-            equation in latex interpretable form
-        """
-        raise NotImplementedError
-
-    @abstractmethod
-    def get_console_string(self):
-        """Simplified string conversion of equation
-
-        Returns
-        -------
-        str
-            compact form of equation
+            optimization paremeters.
         """
         raise NotImplementedError
 

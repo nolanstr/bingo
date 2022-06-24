@@ -15,6 +15,15 @@ class Chromosome(metaclass=ABCMeta):
     This class is the base of a genetic individual in bingo evolutionary
     analyses.
 
+    Parameters
+    ----------
+    genetic_age : int
+        age of the oldest component of the genetic material in the individual
+    fitness :
+        starting value of fitness
+    fit_set : bool
+        Whether the fitness has been calculated for the individual
+
     Attributes
     ----------
     fitness
@@ -41,6 +50,7 @@ class Chromosome(metaclass=ABCMeta):
 
     @property
     def genetic_age(self):
+        """The age of the oldest components of the individual"""
         return self._genetic_age
 
     @genetic_age.setter
@@ -49,6 +59,7 @@ class Chromosome(metaclass=ABCMeta):
 
     @property
     def fit_set(self):
+        """Indication of whether the fitness has been set"""
         return self._fit_set
 
     @fit_set.setter
@@ -76,12 +87,12 @@ class Chromosome(metaclass=ABCMeta):
         raise NotImplementedError
 
     @abstractmethod
-    def distance(self, chromosome):
-        """Distance from self to chromosome
+    def distance(self, other):
+        """Distance from self to other chromosome
 
         Returns
         -------
         float
-            distance from self to chromosome
+            distance from self to other
         """
         raise NotImplementedError

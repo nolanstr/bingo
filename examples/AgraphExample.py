@@ -3,19 +3,17 @@
 # pylint: disable=missing-docstring
 import numpy as np
 
-from bingo.symbolic_regression.agraph.crossover import AGraphCrossover
-from bingo.symbolic_regression.agraph.mutation import AGraphMutation
-from bingo.symbolic_regression.agraph.generator import AGraphGenerator
-from bingo.symbolic_regression.agraph.component_generator \
-    import ComponentGenerator
-from bingo.symbolic_regression.explicit_regression import ExplicitRegression, \
-                                                        ExplicitTrainingData
-
 from bingo.evolutionary_algorithms.age_fitness import AgeFitnessEA
 from bingo.evaluation.evaluation import Evaluation
 from bingo.evolutionary_optimizers.island import Island
 from bingo.local_optimizers.continuous_local_opt \
     import ContinuousLocalOptimization
+from bingo.symbolic_regression import ComponentGenerator, \
+                                      AGraphGenerator, \
+                                      AGraphCrossover, \
+                                      AGraphMutation, \
+                                      ExplicitRegression, \
+                                      ExplicitTrainingData
 
 POP_SIZE = 128
 STACK_SIZE = 10
@@ -46,7 +44,7 @@ def init_island():
     component_generator.add_operator("-")
     component_generator.add_operator("*")
 
-    crossover = AGraphCrossover(component_generator)
+    crossover = AGraphCrossover()
     mutation = AGraphMutation(component_generator)
 
     agraph_generator = AGraphGenerator(STACK_SIZE, component_generator)

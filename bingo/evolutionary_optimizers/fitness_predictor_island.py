@@ -19,8 +19,8 @@ from copy import copy, deepcopy
 import numpy as np
 from ..util.argument_validation import argument_validation
 from ..evaluation.evaluation import Evaluation
-from ..evolutionary_algorithms.deterministic_crowding \
-    import DeterministicCrowdingEA
+from ..evolutionary_algorithms.generalized_crowding \
+    import GeneralizedCrowdingEA
 from .island import Island
 from ..chromosomes.multiple_values import MultipleValueChromosomeGenerator, \
                                          SinglePointCrossover, \
@@ -101,6 +101,7 @@ class FitnessPredictorIsland(Island):
         self._predictor_population_size = predictor_population_size
         self._predictor_size = int(predictor_size_ratio * self._full_data_size)
         self._predictor_update_frequency = predictor_update_frequency
+        # pylint: disable=C0103
         self._target_predictor_computation_ratio = predictor_computation_ratio
 
         self._trainer_population_size = trainer_population_size
@@ -114,6 +115,7 @@ class FitnessPredictorIsland(Island):
 
     @property
     def hall_of_fame(self):
+        """The hall of fame object which is updated during evolution"""
         return self._hof_w_true_fitness
 
     @hall_of_fame.setter
@@ -122,7 +124,7 @@ class FitnessPredictorIsland(Island):
         self._hof_w_predicted_fitness = deepcopy(hall_of_fame)
 
     def _execute_generational_step(self):
-        LOGGER.debug("I> " + str(self.generational_age + 1))
+        LOGGER.debug("I> %d", self.generational_age + 1)
         super()._execute_generational_step()
 
         self._step_predictor_island_to_maintain_ratio()
@@ -151,23 +153,22 @@ class FitnessPredictorIsland(Island):
         crossover = SinglePointCrossover()
         mutation = SinglePointMutation(index_generator)
         evaluation = Evaluation(self._predictor_fitness_function)
-        dc_ea = DeterministicCrowdingEA(evaluation, crossover, mutation,
-                                        crossover_probability=0.5,
-                                        mutation_probability=0.2)
+        dc_ea = GeneralizedCrowdingEA(evaluation, crossover, mutation,
+                                      crossover_probability=0.5,
+                                      mutation_probability=0.2)
         return dc_ea
 
     def _step_predictor_island_to_maintain_ratio(self):
         while (self._get_predictor_computation_ratio()
                < self._target_predictor_computation_ratio):
-            LOGGER.debug("P> " +
-                         str(self._predictor_island.generational_age + 1))
+            LOGGER.debug("P> %d", self._predictor_island.generational_age + 1)
             self._predictor_island.evolve(1, suppress_logging=True)
 
     def _update_predictor_if_needed(self):
         if self.generational_age % self._predictor_update_frequency == 0:
             LOGGER.debug("Updating fitness predictor")
             self._update_to_use_best_fitness_predictor()
-            self._reset_fitness(self.population)
+            self.reset_fitness(self.population)
             if self._hof_w_predicted_fitness is not None:
                 self._hof_w_predicted_fitness.clear()
             self.evaluate_population()
@@ -176,7 +177,7 @@ class FitnessPredictorIsland(Island):
         if self.generational_age % self._trainer_update_frequency == 0:
             LOGGER.debug("Updating trainer")
             self._add_new_trainer()
-            self._reset_fitness(self._predictor_island.population)
+            self.reset_fitness(self._predictor_island.population)
             self._predictor_island.evaluate_population()
 
     def _update_to_use_best_fitness_predictor(self):
@@ -216,11 +217,6 @@ class FitnessPredictorIsland(Island):
         island_expense = self._fitness_function.eval_count \
                          * self._predictor_size
         return predictor_expense / (predictor_expense + island_expense)
-
-    @staticmethod
-    def _reset_fitness(population):
-        for indv in population:
-            indv.fit_set = False
 
     def _get_potential_hof_members(self):
         self._hof_w_predicted_fitness.update(self.population)
