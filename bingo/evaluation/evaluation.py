@@ -73,7 +73,6 @@ class Evaluation:
                     results.append(
                             pool.apply_async(_fitness_job,
                                              (indv, self.fitness_function, i)))
-
             for res in results:
                 indv, i = res.get()
                 population[i] = indv

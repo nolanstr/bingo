@@ -9,11 +9,12 @@ from smcpy.mcmc.vector_mcmc import VectorMCMC
 from smcpy.mcmc.vector_mcmc_kernel import VectorMCMCKernel
 from smcpy import AdaptiveSampler
 from smcpy import ImproperUniform
+from smcpy import MultiSourceNormal
 
+class MultiSourceBayesFitnessFunction(FitnessFunction):
 
-class BayesFitnessFunction(FitnessFunction):
-
-    def __init__(self, continuous_local_opt, num_particles=150, mcmc_steps=12,
+    def __init__(self, continuous_local_opt, src_num_pts,
+                 num_particles=150, mcmc_steps=12,
                  ess_threshold=0.75, std=None,
                  return_nmll_only=True, num_multistarts=1,
                  uniformly_weighted_proposal=True):
@@ -25,6 +26,8 @@ class BayesFitnessFunction(FitnessFunction):
         self._return_nmll_only = return_nmll_only
         self._num_multistarts = num_multistarts
         self._uniformly_weighted_proposal = uniformly_weighted_proposal
+        self._all_src_num_pts = tuple(src_num_pts)
+        self._src_num_pts = tuple(src_num_pts)
 
         num_observations = len(continuous_local_opt.training_data.x)
         self._norm_phi = 1 / np.sqrt(num_observations)
@@ -38,19 +41,23 @@ class BayesFitnessFunction(FitnessFunction):
             proposal = self.generate_proposal_samples(individual,
                                                       self._num_particles)
         except (ValueError, np.linalg.LinAlgError, RuntimeError) as e:
-            print(e)
             if self._return_nmll_only:
                 return np.nan
             return np.nan, None, None
-        
         priors = [ImproperUniform() for _ in range(len(param_names))]
+
         if self._std is None:
-            priors.append(ImproperUniform(0, None))
-            param_names.append('std_dev')
+            #appends a noise term for each dataset
+            for i in range(len(self._src_num_pts)):
+                priors.append(ImproperUniform(0, None))
+                param_names.append(f'std_dev{i}')
+        log_like_args = [self._src_num_pts, 
+                            tuple([None]*len(self._src_num_pts))]
+        log_like_func = MultiSourceNormal
 
         vector_mcmc = VectorMCMC(lambda x: self.evaluate_model(x, individual),
                                  self.training_data.y.flatten(), priors,
-                                 log_like_args=self._std)
+                                 log_like_args, log_like_func)
 
         mcmc_kernel = VectorMCMCKernel(vector_mcmc, param_order=param_names)
         smc = AdaptiveSampler(mcmc_kernel)
@@ -58,14 +65,12 @@ class BayesFitnessFunction(FitnessFunction):
             step_list, marginal_log_likes = \
                 smc.sample(self._num_particles, self._mcmc_steps,
                            self._ess_threshold,
+                           #proposal=None, 
                            proposal=proposal,
                            required_phi=self._norm_phi)
         except (ValueError, np.linalg.LinAlgError, ZeroDivisionError) as e:
-            print(e)
             if self._return_nmll_only:
                 self._set_mean_proposal(individual, proposal)
-                print(e)
-                print('b')
                 return np.nan
             return np.nan, None, None
 
@@ -134,9 +139,12 @@ class BayesFitnessFunction(FitnessFunction):
                            for _, _, var_ols, ssqe in cov_estimates]
             noise_pdf, noise_samples = self._get_samples_and_pdf(noise_dists,
                                                                  num_samples)
-
-            param_names.append('std_dev')
-            samples = np.concatenate((samples, noise_samples), axis=1)
+            '''
+            repeat std_dev for each noise term --> src_pts
+            '''
+            for i in range(len(self._src_num_pts)):
+                samples = np.concatenate((samples, noise_samples), axis=1)
+                param_names.append(f'std_dev{i}')
             pdf *= noise_pdf
 
         if self._uniformly_weighted_proposal:
@@ -160,7 +168,7 @@ class BayesFitnessFunction(FitnessFunction):
             pdf += dist.pdf(samples).reshape(-1, 1)
         pdf /= len(distributions)
         return pdf, samples
-    
+
     def _set_mean_proposal(self, individual, proposal):
         params = np.empty(0)
         for key in proposal[0].keys():

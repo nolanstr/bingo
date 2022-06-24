@@ -10,6 +10,7 @@ from smcpy.mcmc.vector_mcmc_kernel import VectorMCMCKernel
 from smcpy import AdaptiveSampler
 from smcpy import ImproperUniform
 
+import torch
 
 class BayesFitnessFunction(FitnessFunction):
 
@@ -38,11 +39,10 @@ class BayesFitnessFunction(FitnessFunction):
             proposal = self.generate_proposal_samples(individual,
                                                       self._num_particles)
         except (ValueError, np.linalg.LinAlgError, RuntimeError) as e:
-            print(e)
             if self._return_nmll_only:
                 return np.nan
             return np.nan, None, None
-        
+
         priors = [ImproperUniform() for _ in range(len(param_names))]
         if self._std is None:
             priors.append(ImproperUniform(0, None))
@@ -54,18 +54,15 @@ class BayesFitnessFunction(FitnessFunction):
 
         mcmc_kernel = VectorMCMCKernel(vector_mcmc, param_order=param_names)
         smc = AdaptiveSampler(mcmc_kernel)
+
         try:
             step_list, marginal_log_likes = \
                 smc.sample(self._num_particles, self._mcmc_steps,
                            self._ess_threshold,
                            proposal=proposal,
                            required_phi=self._norm_phi)
-        except (ValueError, np.linalg.LinAlgError, ZeroDivisionError) as e:
-            print(e)
+        except (ValueError, np.linalg.LinAlgError, ZeroDivisionError):
             if self._return_nmll_only:
-                self._set_mean_proposal(individual, proposal)
-                print(e)
-                print('b')
                 return np.nan
             return np.nan, None, None
 
@@ -75,7 +72,8 @@ class BayesFitnessFunction(FitnessFunction):
 
         nmll = -1 * (marginal_log_likes[-1] -
                      marginal_log_likes[smc.req_phi_index[0]])
-
+        self.evaluate_fitness_vector(individual)
+        import pdb;pdb.set_trace()
         if self._return_nmll_only:
             return nmll
         return nmll, step_list, vector_mcmc
@@ -160,12 +158,6 @@ class BayesFitnessFunction(FitnessFunction):
             pdf += dist.pdf(samples).reshape(-1, 1)
         pdf /= len(distributions)
         return pdf, samples
-    
-    def _set_mean_proposal(self, individual, proposal):
-        params = np.empty(0)
-        for key in proposal[0].keys():
-            params = np.append(params, proposal[0][key].mean())
-        individual.set_local_optimization_params(params[:-1])
 
     def evaluate_model(self, params, individual):
         self._eval_count += 1
@@ -187,3 +179,98 @@ class BayesFitnessFunction(FitnessFunction):
     @training_data.setter
     def training_data(self, training_data):
         self._cont_local_opt.training_data = training_data
+
+    def build_torch_graph_from_agraph(self, individual):
+        
+        commands = individual._simplified_command_array
+        constants = individual._simplified_constants
+
+        def evaluate(X):
+            ad_stack = [None] * commands.shape[0]
+
+            for i in range(commands.shape[0]):
+
+                node = commands[i, 0]
+                if node == -1:
+                    ad_stack[i] = torch.ones_like(
+                        X[0], dtype=torch.float64) * commands[i,1]
+                elif node == 0:
+                    column_idx = commands[i, 1]
+                    ad_stack[i] = X[column_idx]
+                elif node == 1:
+                    const_idx = commands[i, 1]
+                    # IMPORTANT: We need to first create the constant using numpy
+                    # and then convert to tensor to avoid a memory leak. This bypasses
+                    # one of tensorflows caching mechanisms for constants which causes the leak.
+                    ad_stack[i] = torch.ones_like(
+                        X[0], dtype=torch.float64) * constants[const_idx]
+                elif node == 2:
+                    t1_idx, t2_idx = commands[i, 1], commands[i, 2]
+                    ad_stack[i] = ad_stack[t1_idx] + ad_stack[t2_idx]
+                elif node == 3:
+                    t1_idx, t2_idx = commands[i, 1], commands[i, 2]
+                    ad_stack[i] = ad_stack[t1_idx] - ad_stack[t2_idx]
+                elif node == 4:
+                    t1_idx, t2_idx = commands[i, 1], commands[i, 2]
+                    ad_stack[i] = ad_stack[t1_idx] * ad_stack[t2_idx]
+                elif node == 5:
+                    t1_idx, t2_idx = commands[i, 1], commands[i, 2]
+                    ad_stack[i] = ad_stack[t1_idx] / ad_stack[t2_idx]
+                elif node == 6:
+                    t1_idx = commands[i, 1]
+                    ad_stack[i] = torch.sin(ad_stack[t1_idx])
+                elif node == 7:
+                    t1_idx = commands[i, 1]
+                    ad_stack[i] = torch.cos(ad_stack[t1_idx])
+                elif node == 8:
+                    t1_idx = commands[i, 1]
+                    ad_stack[i] = torch.exp(ad_stack[t1_idx])
+                elif node == 9:
+                    t1_idx = commands[i, 1]
+                    ad_stack[i] = torch.log(tf.abs(ad_stack[t1_idx]))
+                elif node == 10:
+                    t1_idx, t2_idx = commands[i, 1], commands[i, 2]
+                    ad_stack[i] = torch.pow(
+                        ad_stack[t1_idx], ad_stack[t2_idx])
+                elif node == 11:
+                    t1_idx = commands[i, 1]
+                    ad_stack[i] = torch.abs(ad_stack[t1_idx])
+                elif node == 12:
+                    t1_idx = commands[i, 1]
+                    ad_stack[i] = torch.sqrt(torch.abs(ad_stack[t1_idx]))
+                elif node == 13:
+                    t1_idx, t2_idx = commands[i, 1], commands[i, 2]
+                    ad_stack[i] = torch.pow(
+                        torch.abs(ad_stack[t1_idx]), ad_stack[t2_idx])
+                elif node == 14:
+                    t1_idx = commands[i, 1] 
+                    ad_stack[i] = torch.sinh(ad_stack[t1_idx])
+                elif node == 15:
+                    t1_idx = commands[i, 1]
+                    ad_stack[i] = torch.cosh(ad_stack[t1_idx])
+                else:
+                    raise IndexError(f"Node value {node} unrecognized") 
+            return ad_stack[-1]
+
+        return evaluate
+
+    def evaluate_fitness_vector(self, individual):
+        X = torch.tensor(self.training_data.x.T, requires_grad=True)
+        self.eval_count += 1
+        ad_graph_function = self.build_torch_graph_from_agraph(individual)
+        U = ad_graph_function(X) 
+
+        U_x = torch.autograd.grad(U.sum(),
+                X, create_graph=True, allow_unused=True)[0]
+        #U_xx = torch.autograd.grad(U_x.sum(),
+        #        X, create_graph=True, allow_unused=True)[0]
+        """
+        check U_x is positive after 0.4
+        True --> return nmll
+        False --> return np.nan or -np.inf
+        Do this later:
+
+        - Ensure that U_x[i] is decrease after 0.4 w.r.t U_x[i-1].
+
+        """
+        return check

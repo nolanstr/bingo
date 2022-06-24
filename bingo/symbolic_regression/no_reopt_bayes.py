@@ -38,11 +38,10 @@ class BayesFitnessFunction(FitnessFunction):
             proposal = self.generate_proposal_samples(individual,
                                                       self._num_particles)
         except (ValueError, np.linalg.LinAlgError, RuntimeError) as e:
-            print(e)
             if self._return_nmll_only:
                 return np.nan
             return np.nan, None, None
-        
+
         priors = [ImproperUniform() for _ in range(len(param_names))]
         if self._std is None:
             priors.append(ImproperUniform(0, None))
@@ -54,18 +53,15 @@ class BayesFitnessFunction(FitnessFunction):
 
         mcmc_kernel = VectorMCMCKernel(vector_mcmc, param_order=param_names)
         smc = AdaptiveSampler(mcmc_kernel)
+
         try:
             step_list, marginal_log_likes = \
                 smc.sample(self._num_particles, self._mcmc_steps,
                            self._ess_threshold,
                            proposal=proposal,
                            required_phi=self._norm_phi)
-        except (ValueError, np.linalg.LinAlgError, ZeroDivisionError) as e:
-            print(e)
+        except (ValueError, np.linalg.LinAlgError, ZeroDivisionError):
             if self._return_nmll_only:
-                self._set_mean_proposal(individual, proposal)
-                print(e)
-                print('b')
                 return np.nan
             return np.nan, None, None
 
@@ -86,7 +82,7 @@ class BayesFitnessFunction(FitnessFunction):
         return [f'p{i}' for i in range(num_params)]
 
     def do_local_opt(self, individual):
-        individual._needs_opt = True
+        #individual._needs_opt = True
         _ = self._cont_local_opt(individual)
         return individual
 
@@ -160,12 +156,6 @@ class BayesFitnessFunction(FitnessFunction):
             pdf += dist.pdf(samples).reshape(-1, 1)
         pdf /= len(distributions)
         return pdf, samples
-    
-    def _set_mean_proposal(self, individual, proposal):
-        params = np.empty(0)
-        for key in proposal[0].keys():
-            params = np.append(params, proposal[0][key].mean())
-        individual.set_local_optimization_params(params[:-1])
 
     def evaluate_model(self, params, individual):
         self._eval_count += 1

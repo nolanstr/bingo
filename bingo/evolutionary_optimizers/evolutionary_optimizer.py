@@ -54,6 +54,7 @@ class EvolutionaryOptimizer(metaclass=ABCMeta):
         self._previous_checkpoints = []
         self._test_function = test_function
         self._log_stats_header()
+        self._times = []
 
     def _log_stats_header(self):
         header = "#generational_age, elapsed_time, " + \
@@ -292,13 +293,17 @@ class EvolutionaryOptimizer(metaclass=ABCMeta):
         """
         start_time = datetime.now()
         self._do_evolution(num_generations)
+        elapsed_time = datetime.now() - start_time
+        self._times.append(elapsed_time)
         if hall_of_fame_update:
             self.update_hall_of_fame()
         if not suppress_logging:
+            print('sadfasfd')
             self._log_evolution(start_time)
 
     def _log_evolution(self, start_time):
         elapsed_time = datetime.now() - start_time
+        self._times.append(elapsed_time)
         LOGGER.log(DETAILED_INFO, "Evolution time %s\t fitness %.3le",
                    elapsed_time, self.get_best_fitness())
 

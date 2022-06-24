@@ -7,19 +7,20 @@ from bingo.evaluation.fitness_function import FitnessFunction
 
 from smcpy.mcmc.vector_mcmc import VectorMCMC
 from smcpy.mcmc.vector_mcmc_kernel import VectorMCMCKernel
-from smcpy import AdaptiveSampler
+from smcpy import FixedSampler
 from smcpy import ImproperUniform
 
 
 class BayesFitnessFunction(FitnessFunction):
 
     def __init__(self, continuous_local_opt, num_particles=150, mcmc_steps=12,
-                 ess_threshold=0.75, std=None,
+                 smc_steps=20, ess_threshold=0.75, std=None,
                  return_nmll_only=True, num_multistarts=1,
                  uniformly_weighted_proposal=True):
 
         self._num_particles = num_particles
         self._mcmc_steps = mcmc_steps
+        self._smc_steps = smc_steps
         self._ess_threshold = ess_threshold
         self._std = std
         self._return_nmll_only = return_nmll_only
@@ -31,6 +32,7 @@ class BayesFitnessFunction(FitnessFunction):
 
         self._cont_local_opt = continuous_local_opt
         self._eval_count = 0
+        self.create_phi_sequence()
 
     def __call__(self, individual):
         param_names = self.get_parameter_names(individual)
@@ -38,11 +40,10 @@ class BayesFitnessFunction(FitnessFunction):
             proposal = self.generate_proposal_samples(individual,
                                                       self._num_particles)
         except (ValueError, np.linalg.LinAlgError, RuntimeError) as e:
-            print(e)
             if self._return_nmll_only:
                 return np.nan
             return np.nan, None, None
-        
+
         priors = [ImproperUniform() for _ in range(len(param_names))]
         if self._std is None:
             priors.append(ImproperUniform(0, None))
@@ -53,19 +54,15 @@ class BayesFitnessFunction(FitnessFunction):
                                  log_like_args=self._std)
 
         mcmc_kernel = VectorMCMCKernel(vector_mcmc, param_order=param_names)
-        smc = AdaptiveSampler(mcmc_kernel)
+        smc = FixedSampler(mcmc_kernel)
+
         try:
             step_list, marginal_log_likes = \
                 smc.sample(self._num_particles, self._mcmc_steps,
-                           self._ess_threshold,
-                           proposal=proposal,
-                           required_phi=self._norm_phi)
-        except (ValueError, np.linalg.LinAlgError, ZeroDivisionError) as e:
-            print(e)
+                           self._phi_sequence, self._ess_threshold,
+                           proposal=proposal)
+        except (ValueError, np.linalg.LinAlgError, ZeroDivisionError):
             if self._return_nmll_only:
-                self._set_mean_proposal(individual, proposal)
-                print(e)
-                print('b')
                 return np.nan
             return np.nan, None, None
 
@@ -74,11 +71,21 @@ class BayesFitnessFunction(FitnessFunction):
         individual.set_local_optimization_params(maps[:-1])
 
         nmll = -1 * (marginal_log_likes[-1] -
-                     marginal_log_likes[smc.req_phi_index[0]])
+                     marginal_log_likes[self._req_phi_idx])
 
         if self._return_nmll_only:
             return nmll
         return nmll, step_list, vector_mcmc
+    
+    def create_phi_sequence(self):
+
+        phi_seq = np.power(np.linspace(0, 1, self._smc_steps), 12)
+        idx = np.argmin(abs(phi_seq - self._norm_phi))
+        phi_seq = np.append(np.append(phi_seq[0:idx], 
+                np.array([self._norm_phi])), phi_seq[idx:])
+        self._phi_sequence = phi_seq
+        self._req_phi_idx = idx
+
 
     @staticmethod
     def get_parameter_names(individual):
@@ -160,12 +167,6 @@ class BayesFitnessFunction(FitnessFunction):
             pdf += dist.pdf(samples).reshape(-1, 1)
         pdf /= len(distributions)
         return pdf, samples
-    
-    def _set_mean_proposal(self, individual, proposal):
-        params = np.empty(0)
-        for key in proposal[0].keys():
-            params = np.append(params, proposal[0][key].mean())
-        individual.set_local_optimization_params(params[:-1])
 
     def evaluate_model(self, params, individual):
         self._eval_count += 1
