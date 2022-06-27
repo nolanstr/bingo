@@ -12,6 +12,7 @@ from bingo.evolutionary_optimizers.fitness_predictor_island import \
     FitnessPredictorIsland
 from bingo.evolutionary_algorithms.deterministic_crowding import \
     DeterministicCrowdingEA
+from bingo.stats.hall_of_fame import HallOfFame
 from bingo.symbolic_regression.agraph.generator import AGraphGenerator
 from bingo.symbolic_regression.agraph.component_generator import \
     ComponentGenerator
@@ -63,33 +64,49 @@ def get_evo_opt(hyperparams, X, y):
                                       hyperparams.get("CROSSOVER_PROB", 0.4),
                                       hyperparams.get("MUTATION_PROB", 0.1))
 
+    hof = HallOfFame(5)
+
     return FitnessPredictorIsland(evo_alg, generator,
-                                  hyperparams["POPULATION_SIZE"])
+                                  hyperparams["POPULATION_SIZE"],
+                                  hall_of_fame=hof)
 
 
-def run_trial(hyperparams, log_dir, X, y):
+def run_trial(hyperparams, checkpoint_dir, X, y):
     evo_opt = get_evo_opt(hyperparams, X, y)
     evo_opt.evolve_until_convergence(
         max_generations=hyperparams.get("MAX_GENERATIONS", 1e6),
         fitness_threshold=hyperparams.get("FITNESS_THRESHOLD", 1e-6),
         convergence_check_frequency=50,
-        checkpoint_base_name=log_dir + "/checkpoint")
+        checkpoint_base_name=checkpoint_dir + "/checkpoint")
 
 
-def setup_logging(log_directory, hyperparam_dict, dataset_i):
+def setup_logging(log_directory, hyperparam_dict, dataset_i, sample_i=0):
     if not os.path.exists(log_directory):
         os.makedirs(log_directory)
 
     with open(log_directory + "/hyperparams.json", "w") as f:
         json.dump(hyperparam_dict, f)
 
-    logging.basicConfig(filename=f"{log_directory}/dataset_{dataset_i}.log",
-                        filemode="w+", level=logging.INFO)
+    log_file = f"{log_directory}/sample_{sample_i}.log"
+
+    if sample_i == 0:
+        logging.basicConfig(filename=log_file,
+                            filemode="w+",
+                            level=logging.INFO)
+    else:
+        file_handler = logging.FileHandler(log_file, "w+")
+        logger = logging.getLogger()
+        for handler in logger.handlers[:]:
+            logger.removeHandler(handler)
+        logger.addHandler(file_handler)
 
 
 if __name__ == '__main__':
-    if not os.path.exists("E:/GPSRResearchEDrive/seeding_research"):
-        raise RuntimeError("output directory (E:/GPSRResearchEDrive/seeding_research) doesn't exist, most likely Linux/Windows issue")
+    if not os.path.exists("E:/GPSRResearchEDrive/seeding_research")\
+            and not os.path.exists("/mnt/e/GPSRResearchEDrive/seeding_research"):
+        raise RuntimeError("output directory doesn't exist, "
+                           "most likely Linux/Windows issue")
+
 
     df = pd.read_pickle("data/1000_points_100_eq_16_stack.pkl")
 
@@ -97,10 +114,10 @@ if __name__ == '__main__':
         "STACK_SIZE": 16,
         "POPULATION_SIZE": 100,
 
-        "MAX_GENERATIONS": int(1e8),
+        "MAX_GENERATIONS": int(10000),
         "FITNESS_THRESHOLD": 1e-6,
 
-        "USE_SIMPLIFICATION": True,
+        "USE_SIMPLIFICATION": False,
         "CROSSOVER_PROB": 0.4,
         "MUTATION_PROB": 0.1,
 
@@ -112,7 +129,7 @@ if __name__ == '__main__':
 
         "TRAIN_PERCENT": 0.75,
         "SAMPLE_SIZE": 10,
-        "METHOD_NAME": "no_seeding",
+        "METHOD_NAME": "no_seeding_1",
     }
     method_name = HYPERPARAMS["METHOD_NAME"]
     sample_size = HYPERPARAMS.get("SAMPLE_SIZE", 10)
@@ -120,14 +137,16 @@ if __name__ == '__main__':
     print("method:", method_name, end="\n\n")
     for i, row in df.iterrows():
         print("dataset:", i)
+
         HYPERPARAMS["train_test_split_seed"] = np.random.randint(1000)
         X, y = row["true_X"], row["true_y"]
-        train_X, test_X, train_y, test_y = \
-            train_test_split(X, y,
-                             train_size=HYPERPARAMS.get("TRAIN_PERCENT", 0.75),
-                             random_state=HYPERPARAMS["train_test_split_seed"])
         for sample_i in range(sample_size):
             print("\t sample:", sample_i)
-            log_dir = f"E:/GPSRResearchEDrive/seeding_research/output/{method_name}/dataset_{i}/sample_{sample_i}"
-            setup_logging(log_dir, HYPERPARAMS, i)
+            train_X, test_X, train_y, test_y = \
+                train_test_split(X, y,
+                                 train_size=HYPERPARAMS.get("TRAIN_PERCENT", 0.75),
+                                 random_state=HYPERPARAMS["train_test_split_seed"])
+            # log_dir = f"E:/GPSRResearchEDrive/seeding_research/output/{method_name}/dataset_{i}/sample_{sample_i}"
+            log_dir = f"/mnt/e/GPSRResearchEDrive/seeding_research/output/{method_name}/dataset_{i}/sample_{sample_i}"
+            setup_logging(log_dir, HYPERPARAMS, i, sample_i)
             run_trial(HYPERPARAMS, log_dir, train_X, train_y)
