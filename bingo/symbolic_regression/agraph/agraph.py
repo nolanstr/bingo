@@ -50,12 +50,10 @@ Node      Name                                     Math
 import logging
 import numpy as np
 from sympy.core import Expr
-from sympy import sympify
 
-from .string_parsing import sympy_string_to_command_array_and_constants
+from .string_parsing import eq_string_to_command_array_and_constants
 from .string_generation import get_formatted_string
 from ..equation import Equation
-from ...local_optimizers import continuous_local_opt
 from .operator_definitions import CONSTANT
 
 try:
@@ -92,7 +90,7 @@ def force_use_of_python_simplification():
     USING_PYTHON_SIMPLIFICATION = True
 
 
-class AGraph(Equation, continuous_local_opt.ChromosomeInterface):
+class AGraph(Equation):
     """Acyclic graph representation of an equation.
 
     `AGraph` is initialized with with empty command array and no constants.
@@ -101,8 +99,8 @@ class AGraph(Equation, continuous_local_opt.ChromosomeInterface):
     ----------
     use_simplification : bool, optional
         Whether to use cas-simplification or not.
-    sympy_representation : sympy-formatted str or sympy expression, optional
-        A sympy-formatted str or sympy expression to build the AGraph from.
+    equation : equation str or sympy expression, optional
+        An equation str or sympy expression to build the AGraph from.
 
     Attributes
     ----------
@@ -115,7 +113,7 @@ class AGraph(Equation, continuous_local_opt.ChromosomeInterface):
     constants : tuple of numeric
         numeric constants that are used in the equation
     """
-    def __init__(self, use_simplification=False, sympy_representation=None):
+    def __init__(self, use_simplification=False, equation=None):
         super().__init__()
 
         self._use_simplification = use_simplification
@@ -123,7 +121,10 @@ class AGraph(Equation, continuous_local_opt.ChromosomeInterface):
         if use_simplification and not USING_PYTHON_SIMPLIFICATION:
             force_use_of_python_simplification()
 
-        if sympy_representation is None:
+        self._init_command_array_and_const(equation)
+
+    def _init_command_array_and_const(self, equation):
+        if equation is None:
             self._command_array = np.empty([0, 3], dtype=int)
 
             self._simplified_command_array = np.empty([0, 3], dtype=int)
@@ -131,20 +132,17 @@ class AGraph(Equation, continuous_local_opt.ChromosomeInterface):
 
             self._needs_opt = False
             self._modified = False
-        elif isinstance(sympy_representation, (Expr, str)):
-            if isinstance(sympy_representation, Expr):
-                sympy_str = str(sympy_representation)
-            else:  # is str instance
-                # not using sympy_representation directly
-                # because it might not be in simplified form
-                sympy_str = str(sympify(sympy_representation))
+        elif isinstance(equation, (Expr, str)):
             command_array, constants = \
-                sympy_string_to_command_array_and_constants(sympy_str)
+                eq_string_to_command_array_and_constants(str(equation))
+
             self.set_local_optimization_params(constants)
+            if len(constants) > 0:
+                self._needs_opt = True
+
             self.command_array = command_array
-            # TODO decide on setting _needs_opt or not
         else:
-            raise TypeError("sympy_representation is not a valid format")
+            raise TypeError("equation is not in a valid format")
 
     @property
     def engine(self):

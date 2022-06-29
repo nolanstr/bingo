@@ -6,7 +6,7 @@ import pytest
 
 from bingo.symbolic_regression.agraph.string_parsing import \
     infix_to_postfix, postfix_to_command_array_and_constants, \
-    sympy_string_to_infix_tokens, sympy_string_to_command_array_and_constants
+    eq_string_to_infix_tokens, eq_string_to_command_array_and_constants
 from bingo.symbolic_regression.agraph.string_generation import \
     get_formatted_string
 
@@ -126,7 +126,7 @@ def test_infix_to_postfix_with_functions(expression, expected):
 def test_postfix_to_command_array_and_constants_basic():
     postfix_tokens = "X_0 1.0 + sin X_0 2.0 / cos * 2.0 -".split(" ")
     # sin(X_0 + 1.0) * cos(X_0 / 2.0) - 2.0
-    expected_console_string = "(sin(X_0 + 1.0))(cos((X_0)/(2.0) )) - (2.0)"
+    expected_console_string = "(sin(X_0 + 1.0))(cos((X_0)/(2.0))) - (2.0)"
     command_array, constants =\
         postfix_to_command_array_and_constants(postfix_tokens)
     assert get_formatted_string("console", command_array, constants) ==\
@@ -138,7 +138,7 @@ def test_postfix_to_command_array_and_constants_complex():
         "X_0 X_1 + 2.0 * X_2 X_3 - 3 / + X_4 X_5 3 + ^ +".split(" ")
     # (X_0 + X_1) * 2.0 + (X_2 - X_3) / 3 + X_4^(X_5 + 3)
     expected_console_string =\
-        "(X_0 + X_1)(2.0) + (X_2 - (X_3))/(3)  + (X_4)^(X_5 + 3)"
+        "(X_0 + X_1)(2.0) + (X_2 - (X_3))/(3) + (X_4)^(X_5 + 3)"
     command_array, constants =\
         postfix_to_command_array_and_constants(postfix_tokens)
     assert get_formatted_string("console", command_array, constants) ==\
@@ -164,13 +164,12 @@ def test_postfix_to_command_array_and_constants_unordered_variables():
 
 
 def test_postfix_to_command_array_and_constants_duplicated_vars_consts_and_ints():  # pylint: disable=line-too-long
-    postfix_tokens = "X_0 1.0 + 2 + X_0 1.0 + 2 + +".split(" ")
-    expected_console_string = "X_0 + 1.0 + 2 + X_0 + 1.0 + 2"
+    postfix_tokens = "X_0 X_1 + 2 + X_0 X_1 + 2 + +".split(" ")
+    expected_console_string = "X_0 + X_1 + 2 + X_0 + X_1 + 2"
     command_array, constants =\
         postfix_to_command_array_and_constants(postfix_tokens)
-    assert len(command_array) == 8
+    assert len(command_array) == 6
     # don't duplicate variables, constants, or integers
-    assert len(constants) == 1  # don't duplicate constants
     assert get_formatted_string("console", command_array, constants) ==\
            expected_console_string
 
@@ -211,55 +210,86 @@ def test_postfix_to_command_array_and_constants_invalid_postfix(postfix_str,
     assert str(exception_info.value) == exception_message
 
 
-def test_sympy_string_to_infix_tokens_basic():
-    sympy_string = "-1.0 + X_0 + 2.0"
-    assert sympy_string_to_infix_tokens(sympy_string) == sympy_string.split(" ")
+def test_eq_string_to_infix_tokens_basic():
+    eq_string = "-1.0 + X_0 + 2.0"
+    assert eq_string_to_infix_tokens(eq_string) == eq_string.lower().split(" ")
 
 
-def test_sympy_string_to_infix_tokens_negative_unary():
-    sympy_string = "-X_0 - -sin(-X_0) - -1.0"
-    expected_string = "-1 * X_0 - -1 * sin ( -1 * X_0 ) - -1.0"
-    assert sympy_string_to_infix_tokens(sympy_string) == \
+def test_eq_string_to_infix_tokens_negative_unary():
+    eq_string = "-X_0 - -sin(-X_0) - -1.0"
+    expected_string = "-1 * x_0 - -1 * sin ( -1 * x_0 ) - -1.0"
+    assert eq_string_to_infix_tokens(eq_string) == \
            expected_string.split(" ")
 
 
-def test_sympy_string_to_infix_tokens_complex():
-    sympy_string = "X_4**(X_5 + 3) + 2.0*log(X_0 + X_1) + cosh(X_2 - X_3)/3 ^ 5"
-    expected_infix_tokens = "X_4 ^ ( X_5 + 3 ) " \
-                            "+ 2.0 * log ( X_0 + X_1 ) " \
-                            "+ cosh ( X_2 - X_3 ) / 3 ^ 5".split(" ")
-    assert sympy_string_to_infix_tokens(sympy_string) == expected_infix_tokens
+def test_eq_string_to_infix_tokens_paren_mult():
+    input_string = "(X_0)(X_1)"
+    expected_string = "( x_0 ) * ( x_1 )"
+    assert eq_string_to_infix_tokens(input_string) == \
+           expected_string.split(" ")
+
+
+def test_eq_string_to_infix_tokens_asterisk_power():
+    input_string = "X_0**2"
+    expected_string = "x_0 ^ 2"
+    assert eq_string_to_infix_tokens(input_string) == \
+           expected_string.split(" ")
+
+
+def test_eq_string_to_infix_tokens_case_insensitive():
+    eq_string = "X_0 + SiN(x_0) + aBS(1.0) + C_0 + x_0 + c_0"
+    expected_string = "x_0 + sin ( x_0 ) + abs ( 1.0 ) + c_0 + x_0 + c_0"
+    assert eq_string_to_infix_tokens(eq_string) == \
+           expected_string.split(" ")
+
+
+def test_eq_string_to_infix_tokens_complex():
+    eq_string = "X_4**(X_5 + 3) + 2.0*log(X_0 + X_1) + cosh(X_2 - X_3)/3 ^ 5"
+    expected_infix_tokens = "x_4 ^ ( x_5 + 3 ) " \
+                            "+ 2.0 * log ( x_0 + x_1 ) " \
+                            "+ cosh ( x_2 - x_3 ) / 3 ^ 5".split(" ")
+    assert eq_string_to_infix_tokens(eq_string) == expected_infix_tokens
 
 
 @pytest.mark.parametrize("invalid_string", ["zoo", "I", "oo", "nan"])
-def test_sympy_string_to_infix_tokens_invalid(invalid_string):
+def test_eq_string_to_infix_tokens_invalid(invalid_string):
     with pytest.raises(RuntimeError) as exception_info:
-        _, _ = sympy_string_to_infix_tokens(invalid_string)
+        _, _ = eq_string_to_infix_tokens(invalid_string)
     assert str(exception_info.value) == "Cannot parse inf/complex"
 
 
-def test_sympy_string_to_command_array_and_constants_basic():
-    sympy_string = "(X_0 + 1.0) * (3 - X_0) / 5.0"
-    expected_console_string = "((X_0 + 1.0)(3 - (X_0)))/(5.0) "
+def test_eq_string_to_command_array_and_constants_basic():
+    eq_string = "(X_0 + 1.0) * (3 - X_0) / 5.0"
+    expected_console_string = "((X_0 + 1.0)(3 - (X_0)))/(5.0)"
     command_array, constants =\
-        sympy_string_to_command_array_and_constants(sympy_string)
+        eq_string_to_command_array_and_constants(eq_string)
     assert get_formatted_string("console", command_array, constants) ==\
            expected_console_string
 
 
-def test_sympy_string_to_command_array_and_constants_complex():
-    sympy_string = "X_4**(X_5 + 3) + 2.0*log(-X_0 + X_1) + cosh(X_2 - X_3)/3 ^ 5"
+def test_eq_string_to_command_array_and_constants_complex():
+    eq_string = "X_4**(X_5 + 3) + 2.0*log(-X_0 + X_1) + cosh(X_2 - X_3)/3 ^ 5"
     expected_console_string = "(X_4)^(X_5 + 3) " \
                               "+ (2.0)(log((-1.0)(X_0) + X_1)) " \
-                              "+ (cosh(X_2 - (X_3)))/((3)^(5)) "
+                              "+ (cosh(X_2 - (X_3)))/((3)^(5))"
     command_array, constants =\
-        sympy_string_to_command_array_and_constants(sympy_string)
+        eq_string_to_command_array_and_constants(eq_string)
     assert get_formatted_string("console", command_array, constants) ==\
            expected_console_string
+
+
+def test_eq_string_to_command_array_duplicated_vars():
+    eq_string = "(X_1 + X_0) + (X_1 + X_0)"
+    expected_console_string = "X_1 + X_0 + X_1 + X_0"
+    command_array, constants = \
+        eq_string_to_command_array_and_constants(eq_string)
+    assert get_formatted_string("console", command_array, constants) == \
+           expected_console_string
+    assert len(command_array) == 4
 
 
 @pytest.mark.parametrize("invalid_string", ["zoo", "I", "oo", "nan"])
-def test_sympy_string_to_command_array_and_constants_invalid(invalid_string):
+def test_eq_string_to_command_array_and_constants_invalid(invalid_string):
     with pytest.raises(RuntimeError) as excinfo:
-        _, _ = sympy_string_to_command_array_and_constants(invalid_string)
+        _, _ = eq_string_to_command_array_and_constants(invalid_string)
     assert str(excinfo.value) == "Cannot parse inf/complex"

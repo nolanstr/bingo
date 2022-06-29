@@ -8,11 +8,13 @@ operators = {"+", "-", "*", "/", "^"}
 functions = {"sin", "cos", "sinh", "cosh", "exp", "log", "abs", "sqrt"}
 precedence = {"+": 0, "-": 0, "*": 1, "/": 1, "^": 2}
 operator_map = {"+": ADDITION, "-": SUBTRACTION, "*": MULTIPLICATION,
-                "/": DIVISION, "^": POWER, "X": VARIABLE, "C": CONSTANT,
+                "/": DIVISION, "^": POWER, "X": VARIABLE, "x": VARIABLE,
+                "C": CONSTANT, "c": CONSTANT,
                 "sin": SIN, "cos": COS, "sinh": SINH, "cosh": COSH,
                 "exp": EXPONENTIAL, "log": LOGARITHM, "abs": ABS,
                 "sqrt": SQRT}
-var_or_const_pattern = re.compile(r"([XC])_(\d+)")  # matches X_### and C_###
+# matches X_### and C_### (case-insensitive)
+var_or_const_pattern = re.compile(r"([XC])_(\d+)", re.IGNORECASE)
 int_pattern = re.compile(r"\d+")  # matches ###
 non_unary_op_pattern = re.compile(r"([*/^()])")  # matches *, /, ^, (, or )
 negative_pattern = re.compile(r"-([^\s\d])")  # matches -N where N = non-number
@@ -83,44 +85,41 @@ def postfix_to_command_array_and_constants(postfix_tokens):
     stack = []  # index -1 = top (the data structure, not a command array)
     command_array = []
     i = 0
-    var_const_int_to_index = {}
+    command_to_i = {}
     constants = []
     n_constants = 0
 
     for token in postfix_tokens:
-        if token in var_const_int_to_index:  # if we already have a command
-            # that sets a given variable, constant, or integer, just reuse it
-            stack.append(var_const_int_to_index[token])
+        if token in operators:
+            operands = stack.pop(), stack.pop()
+            command = [operator_map[token], operands[1], operands[0]]
+        elif token in functions:
+            operand = stack.pop()
+            command = [operator_map[token], operand, operand]
         else:
-            if token in operators:
-                operands = stack.pop(), stack.pop()
-                command_array.append([operator_map[token],
-                                      operands[1], operands[0]])
-            elif token in functions:
-                operand = stack.pop()
-                command_array.append([operator_map[token], operand, operand])
+            var_or_const = var_or_const_pattern.fullmatch(token)
+            integer = int_pattern.fullmatch(token)
+            if var_or_const:
+                groups = var_or_const.groups()
+                command = [operator_map[groups[0]], int(groups[1]),
+                           int(groups[1])]
+            elif integer:
+                operand = int(token)
+                command = [INTEGER, operand, operand]
             else:
-                var_or_const = var_or_const_pattern.fullmatch(token)
-                integer = int_pattern.fullmatch(token)
-                if var_or_const:
-                    groups = var_or_const.groups()
-                    command_array.append([operator_map[groups[0]],
-                                          int(groups[1]), int(groups[1])])
-                elif integer:
-                    operand = int(token)
-                    command_array.append([INTEGER, operand, operand])
-                else:
-                    try:
-                        constant = float(token)
-                        command_array.append([CONSTANT,
-                                              n_constants, n_constants])
-                        constants.append(constant)
-                        n_constants += 1
-                    except ValueError:
-                        raise RuntimeError(f"Unknown token {token}")
-                var_const_int_to_index[token] = i
-                # if we have a valid variable, constant, or integer,
-                # mark the index of the command that we set/loaded its value
+                try:
+                    command = [CONSTANT, n_constants, n_constants]
+
+                    constant = float(token)
+                    constants.append(constant)
+                    n_constants += 1
+                except ValueError as err:
+                    raise RuntimeError(f"Unknown token {token}") from err
+        if tuple(command) in command_to_i:
+            stack.append(command_to_i[tuple(command)])
+        else:
+            command_to_i[tuple(command)] = i
+            command_array.append(command)
             stack.append(i)
             i += 1
 
@@ -130,49 +129,48 @@ def postfix_to_command_array_and_constants(postfix_tokens):
     return np.array(command_array, dtype=int), constants
 
 
-def sympy_string_to_infix_tokens(sympy_string):
-    """Converts a sympy-formatted string to infix_tokens
+def eq_string_to_infix_tokens(eq_string):
+    """Converts an equation string to infix_tokens
 
     Parameters
     ----------
-    sympy_string : str
-        A string corresponding to a sympy expression
+    eq_string : str
+        A string corresponding to an equation
 
     Returns
     -------
     infix_tokens : list of str
         A list of string tokens that correspond
-        to the expression given by sympy_string
+        to the expression given by eq_string
     """
-    if any(bad_token in sympy_string for bad_token in ["zoo", "I", "oo",
+    if any(bad_token in eq_string for bad_token in ["zoo", "I", "oo",
                                                        "nan"]):
         raise RuntimeError("Cannot parse inf/complex")
-    sympy_string = negative_pattern.sub(r"-1 * \1", sympy_string)
+    eq_string = eq_string.replace(")(", ")*(").replace("**", "^")
+
+    eq_string = negative_pattern.sub(r"-1 * \1", eq_string)
     # replace -token with -1.0 * token if token != a number
-    sympy_string = sympy_string.replace("**", "^")
-    tokens = non_unary_op_pattern.sub(r" \1 ", sympy_string).split(" ")
-    # add extra spaces around non-unary operators then split on those spaces
-    # to get the string tokens
-    tokens = [x for x in tokens if x != ""]
-    # for if there was a trailing space in sympy_string after sub() call
+
+    tokens = non_unary_op_pattern.sub(r" \1 ", eq_string).split(" ")
+    tokens = [x.lower() for x in tokens if x != ""]
     return tokens
 
 
-def sympy_string_to_command_array_and_constants(sympy_string):
-    """Converts a sympy-formatted string to its corresponding command
+def eq_string_to_command_array_and_constants(eq_string):
+    """Converts an equation string to its corresponding command
     array and list of constants
 
     Parameters
     ----------
-    sympy_string : str
-        A string corresponding to a sympy expression
+    eq_string : str
+        A string corresponding to an equation
 
     Returns
     -------
     command_array, constants : Nx3 numpy array of int, list of numeric
         A command array and list of constants
-        corresponding to the expression given by sympy_string
+        corresponding to the expression given by eq_string
     """
-    infix_tokens = sympy_string_to_infix_tokens(sympy_string)
+    infix_tokens = eq_string_to_infix_tokens(eq_string)
     postfix_tokens = infix_to_postfix(infix_tokens)
     return postfix_to_command_array_and_constants(postfix_tokens)
