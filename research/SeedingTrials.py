@@ -19,8 +19,9 @@ from bingo.symbolic_regression.agraph.component_generator import \
 from bingo.symbolic_regression.agraph.crossover import AGraphCrossover
 from bingo.symbolic_regression.agraph.mutation import AGraphMutation
 from bingo.evaluation.evaluation import Evaluation
-from bingo.local_optimizers.continuous_local_opt import \
-    ContinuousLocalOptimization
+from bingo.local_optimizers.local_opt_fitness import \
+    LocalOptFitnessFunction
+from bingo.local_optimizers.scipy_optimizer import ScipyOptimizer
 from bingo.symbolic_regression.explicit_regression import ExplicitTrainingData, \
     ExplicitRegression
 
@@ -45,8 +46,10 @@ def setup_component_gen(hyperparams, n_xs):
 
 def get_evaluation(X, y):
     fitness = ExplicitRegression(ExplicitTrainingData(X, y), metric="mse")
-    clo = ContinuousLocalOptimization(fitness, algorithm="BFGS",
-                                      param_init_bounds=[-10, 10])
+    clo = LocalOptFitnessFunction(fitness,
+                                  ScipyOptimizer(fitness,
+                                                 method="lm",
+                                                 param_init_bounds=[-10, 10]))
     return Evaluation(clo)
 
 

@@ -2,7 +2,8 @@ import numpy as np
 import pandas as pd
 import os
 
-from bingo.local_optimizers.continuous_local_opt import ContinuousLocalOptimization
+from bingo.local_optimizers.local_opt_fitness import LocalOptFitnessFunction
+from bingo.local_optimizers.scipy_optimizer import ScipyOptimizer
 from bingo.symbolic_regression.agraph.agraph import AGraph
 from bingo.symbolic_regression.agraph.component_generator import ComponentGenerator
 from bingo.symbolic_regression.agraph.generator import AGraphGenerator
@@ -52,7 +53,10 @@ def get_utilized_idx(cmd_arr, current_idx=None):
 def fit_approximator_equation(approximator_equation, X, y):
     training_data = ExplicitTrainingData(X, y)
     fitness = ExplicitRegression(training_data, metric="mse")
-    clo = ContinuousLocalOptimization(fitness, algorithm="lm", param_init_bounds=[-10, 10])
+    clo = LocalOptFitnessFunction(fitness,
+                                  ScipyOptimizer(fitness,
+                                                 method="lm",
+                                                 param_init_bounds=[-10, 10]))
 
     clo(approximator_equation)
 
