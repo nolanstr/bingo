@@ -11,7 +11,7 @@ from copy import deepcopy
 from sympy.core import Expr
 
 from .operator_definitions import OPERATOR_NAMES
-from .string_parsing import sympy_string_to_command_array_and_constants
+from .string_parsing import eq_string_to_command_array_and_constants
 from ...util.probability_mass_function import ProbabilityMassFunction
 from ...util.argument_validation import argument_validation
 
@@ -117,14 +117,8 @@ class ComponentGenerator:
         # string or sympy expression, need to turn into a command array
         if isinstance(equation_to_add, str) \
                 or isinstance(equation_to_add, Expr):
-            if isinstance(equation_to_add, str):
-                sympy_str = \
-                    equation_to_add.replace("^", "**").replace(")(", ")*(")
-            else:  # Expr
-                sympy_str = str(equation_to_add)
-
             equation_to_add, _ = \
-                sympy_string_to_command_array_and_constants(sympy_str)
+                eq_string_to_command_array_and_constants(str(equation_to_add))
 
         self._equation_pmf.add_item(equation_to_add, equation_weight)
 

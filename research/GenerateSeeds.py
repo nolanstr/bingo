@@ -42,7 +42,7 @@ class SubgraphSeedGenerator:
 
 
 if __name__ == '__main__':
-    df = pd.read_pickle("C:/Users/David/Desktop/GPSR Research/bingoNASAFork/research/data/1000_points_100_eq_10_stack.pkl")
+    df = pd.read_pickle("C:/Users/dlranda2/Desktop/GPSR/bingo/research/data/1000_points_100_eq_16_stack.pkl")
     row = df.iloc[4]
     eq = row["approx_eq"]
     print(eq)

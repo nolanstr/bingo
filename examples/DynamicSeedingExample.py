@@ -9,16 +9,15 @@ from bingo.evolutionary_algorithms.age_fitness import AgeFitnessEA
 from bingo.evolutionary_optimizers.serial_archipelago import SerialArchipelago
 from bingo.evaluation.evaluation import Evaluation
 from bingo.evolutionary_optimizers.island import Island
-from bingo.local_optimizers.continuous_local_opt \
-    import ContinuousLocalOptimization
-
+from bingo.local_optimizers.local_opt_fitness import LocalOptFitnessFunction
+from bingo.local_optimizers.scipy_optimizer import ScipyOptimizer
 from bingo.symbolic_regression.agraph.component_generator import ComponentGenerator
-
 from bingo.symbolic_regression import AGraphGenerator, \
     AGraphCrossover, \
     AGraphMutation, \
     ExplicitRegression, \
     ExplicitTrainingData
+
 POP_SIZE = 100
 STACK_SIZE = 10
 
@@ -60,7 +59,8 @@ def execute_generational_steps():
     mutation = AGraphMutation(component_generator)
 
     fitness = ExplicitRegression(training_data=training_data)
-    local_opt_fitness = ContinuousLocalOptimization(fitness, algorithm='lm')
+    local_opt_fitness = LocalOptFitnessFunction(
+        fitness, ScipyOptimizer(fitness, method="lm"))
     evaluator = Evaluation(local_opt_fitness)
 
     ea = AgeFitnessEA(evaluator, agraph_generator, crossover,
