@@ -26,6 +26,7 @@ from bingo.local_optimizers.local_opt_fitness import \
 from bingo.local_optimizers.scipy_optimizer import ScipyOptimizer
 from bingo.symbolic_regression.explicit_regression import ExplicitTrainingData, \
     ExplicitRegression
+from research.GenerateSeeds import SubgraphSeedGenerator
 
 from mpi4py import MPI
 communicator = MPI.COMM_WORLD
@@ -89,7 +90,6 @@ def run_trial(hyperparams, checkpoint_dir, X, y):
 
 
 def setup_logging(log_directory, hyperparam_dict, dataset_i, sample_i=0):
-
     if not os.path.exists(log_directory):
         os.makedirs(log_directory)
 
@@ -110,11 +110,16 @@ def setup_logging(log_directory, hyperparam_dict, dataset_i, sample_i=0):
         logger.addHandler(file_handler)
 
 
+def add_seeds(hyperparam_dict, approx_eq):
+    seeds = SubgraphSeedGenerator.get_seed_strs(approx_eq.command_array)
+    hyperparam_dict["SEEDS"] = list(seeds)
+
+
 if __name__ == '__main__':
-    if not os.path.exists("/u/dlranda2/gpsr/output"):
+    output_dir = r"/u/dlranda2/gpsr/output"
+    if not os.path.exists(output_dir):
         raise RuntimeError("output directory doesn't exist, "
                            "most likely Linux/Windows issue")
-
 
     df = pd.read_pickle("/u/dlranda2/gpsr/data/1000_points_100_eq_16_stack.pkl")
 
@@ -137,7 +142,7 @@ if __name__ == '__main__':
 
         "TRAIN_PERCENT": 0.75,
         "SAMPLE_SIZE": 10,
-        "METHOD_NAME": "no_seeding_1",
+        "METHOD_NAME": "subgraph_seeding_1",
     }
     method_name = HYPERPARAMS["METHOD_NAME"]
     sample_size = HYPERPARAMS.get("SAMPLE_SIZE", 10)
@@ -148,6 +153,8 @@ if __name__ == '__main__':
         if rank == 0:
             print("dataset:", i)
 
+        add_seeds(HYPERPARAMS, row["approx_eq"])
+
         HYPERPARAMS["train_test_split_seed"] = np.random.randint(1000)
         X, y = row["true_X"], row["true_y"]
         for sample_i in range(sample_size):
@@ -157,8 +164,7 @@ if __name__ == '__main__':
                 train_test_split(X, y,
                                  train_size=HYPERPARAMS.get("TRAIN_PERCENT", 0.75),
                                  random_state=HYPERPARAMS["train_test_split_seed"])
-            # log_dir = f"E:/GPSRResearchEDrive/seeding_research/output/{method_name}/dataset_{i}/sample_{sample_i}"
-            log_dir = f"/u/dlranda2/gpsr/output/{method_name}/dataset_{i}/sample_{sample_i}"
+            log_dir = output_dir + f"/{method_name}/dataset_{i}/sample_{sample_i}"
             if rank == 0:
                 setup_logging(log_dir, HYPERPARAMS, i, sample_i)
             run_trial(HYPERPARAMS, log_dir, train_X, train_y)
