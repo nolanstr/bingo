@@ -7,6 +7,7 @@ The classes in this module encapsulate the parts of bingo evolutionary analysis
 that are unique to explicit symbolic regression. Namely, these classes are an
 appropriate fitness evaluator and a corresponding training data container.
 """
+import numpy as np
 import logging
 
 from ..evaluation.fitness_function import VectorBasedFunction
@@ -108,6 +109,99 @@ class ExplicitTrainingData(TrainingData):
     def y(self):
         """dependent y data"""
         return self._y
+
+    def __getitem__(self, items):
+        """gets a subset of the `ExplicitTrainingData`
+
+        Parameters
+        ----------
+        items : list or int
+            index (or indices) of the subset
+
+        Returns
+        -------
+        `ExplicitTrainingData` :
+            a Subset
+        """
+        temp = ExplicitTrainingData(self._x[items, :], self._y[items, :])
+        return temp
+
+    def __len__(self):
+        """ gets the length of the first dimension of the data
+
+        Returns
+        -------
+        int :
+            index-able size
+        """
+        return self._x.shape[0]
+
+class SubsetExplicitTrainingData(TrainingData):
+    """
+    ExplicitTrainingData: Training data of this type contains an input array of
+    data (x)  and an output array of data (y).  Both must be 2 dimensional
+    numpy arrays
+
+    Parameters
+    ----------
+    x : 2D numpy array
+        independent variable
+    y : 2D numpy array
+        dependent variable
+    """
+    def __init__(self, training_data, src_num_pts, sample_subsets_sizes):
+        self._x = training_data.x
+        self._y = training_data.y
+
+        self.random_sample(src_num_pts, sample_subsets_sizes)
+
+    @property
+    def x(self):
+        """independent x data"""
+        return self._x
+
+    @property
+    def y(self):
+        """dependent y data"""
+        return self._y
+    
+    def random_sample(self, src_num_pts, sample_subsets_sizes):
+
+        self._split_data_into_subsets(src_num_pts)
+        
+        for i, size in enumerate(sample_subsets_sizes):
+
+            rnd_idxs = np.random.choice(np.arange(src_num_pts[i]), size,
+                                                            replace=False)
+            self._x_subsets[i] = self._x_subset(i)[rnd_idxs, :]
+            self._y_subsets[i] = self._y_subset(i)[rnd_idxs, :]
+
+        self._gather_data()
+
+    def get_subset(self, subset):
+        return self._x_subset(subset), self._y_subset(subset)
+
+    def _x_subset(self, subset):
+        return self._x_subsets[subset]
+
+    def _y_subset(self, subset):
+        return self._y_subsets[subset]
+    
+    def _split_data_into_subsets(self, src_num_pts):
+        
+        self._x_subsets = []
+        self._y_subsets = []
+
+        idxs = np.append(0, np.cumsum(src_num_pts))
+
+        for subset in range(len(src_num_pts)): 
+            self._x_subsets.append(self.x[idxs[subset]:idxs[subset+1], :])
+            self._y_subsets.append(self.y[idxs[subset]:idxs[subset+1], :])
+    
+    def _gather_data(self):
+
+        self._x_subset_data = np.vstack(self._x_subsets)
+        self._y_subset_data = np.vstack(self._y_subsets)
 
     def __getitem__(self, items):
         """gets a subset of the `ExplicitTrainingData`

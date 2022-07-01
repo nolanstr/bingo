@@ -122,7 +122,6 @@ class EvolutionaryOptimizer(metaclass=ABCMeta):
         self._update_checkpoints(checkpoint_base_name, num_checkpoints,
                                  reset=True)
         self._log_optimization(start_time)
-
         while self.generational_age - self._starting_age < min_generations:
             self.evolve(convergence_check_frequency)
             self._update_best_fitness()

@@ -4,6 +4,7 @@ This module defines the a basic form of the evaluation phase of bingo
 evolutionary algorithms.
 """
 from multiprocessing import Pool
+import numpy as np
 
 class Evaluation:
     """Base phase for calculating fitness of a population.
@@ -34,6 +35,7 @@ class Evaluation:
         self.fitness_function = fitness_function
         self._redundant = redundant
         self._multiprocess = multiprocess
+        self._eval_success = []
 
     @property
     def eval_count(self):
@@ -52,10 +54,29 @@ class Evaluation:
         population : list of chromosomes
                      population for which fitness should be calculated
         """
+        try:
+            if self.fitness_function._random_sample_subsets is not False:
+                self.fitness_function.randomize_subsets()
+        except:
+            pass
+
         if self._multiprocess:
             self._multiprocess_eval(population)
         else:
             self._serial_eval(population)
+
+        self.check_eval_success(population)
+
+    def check_eval_success(self, population):
+        
+        success = 0
+
+        for ind in population:
+            if ind.fitness is not np.nan:
+                success += 1
+
+        self._eval_success.append(success/len(population))
+        print(f'******************/{self._eval_success[-1]}\******************')
 
     def _serial_eval(self, population):
         for indv in population:
@@ -64,7 +85,7 @@ class Evaluation:
 
     def _multiprocess_eval(self, population):
         num_procs = self._multiprocess if isinstance(self._multiprocess, int) \
-            else None
+                                                                       else None
 
         with Pool(processes=num_procs) as pool:
             results = []
