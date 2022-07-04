@@ -65,7 +65,6 @@ class MultiSourceBayesFitnessFunction(FitnessFunction):
             proposal = self.generate_proposal_samples(individual,
                                                       self._num_particles)
         except (ValueError, np.linalg.LinAlgError, RuntimeError) as e:
-            print(e)
             if self._return_nmll_only:
                 return np.nan
             return np.nan, None, None
@@ -97,7 +96,6 @@ class MultiSourceBayesFitnessFunction(FitnessFunction):
                            required_phi=self._norm_phi)
 
         except (ValueError, np.linalg.LinAlgError, ZeroDivisionError) as e:
-            print(e)
             if self._return_nmll_only:
                 self._set_mean_proposal(individual, proposal)
                 return np.nan
