@@ -67,7 +67,12 @@ def get_evo_opt(hyperparams, X, y):
 
     evaluator = get_evaluation(X, y)
     crossover = AGraphCrossover()
-    mutation = AGraphMutation(component_generator)
+    eq_prob = hyperparams.get("EQUATION_MUT_PROB", 0.5)
+    other_prob = (1.0 - eq_prob) / 5.0
+    mutation = AGraphMutation(component_generator,
+        command_probability=other_prob, node_probability=other_prob,
+        parameter_probability=other_prob, prune_probability=other_prob,
+        fork_probability=other_prob, equation_probability=eq_prob)
 
     evo_alg = DeterministicCrowdingEA(evaluator, crossover, mutation,
                                       hyperparams.get("CROSSOVER_PROB", 0.4),
@@ -132,11 +137,12 @@ if __name__ == '__main__':
 
         "USE_SIMPLIFICATION": False,
         "CROSSOVER_PROB": 0.4,
-        "MUTATION_PROB": 0.1,
+        "MUTATION_PROB": 0.4,
+        "EQUATION_MUT_PROB": 0.5,
 
         "TERMINAL_PROB": 0.1,
-        "OPERATOR_PROB": 0.7,
-        "EQUATION_PROB": 0.2,
+        "OPERATOR_PROB": 0.9,
+        "EQUATION_PROB": 0.0,
         "OPERATORS": ["+", "-", "*", "/", "sin", "cos"],
         "SEEDS": [],
 
