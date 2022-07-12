@@ -72,7 +72,7 @@ class Evaluation:
         success = 0
 
         for ind in population:
-            if ind.fitness is not np.nan:
+            if not np.isnan(ind.fitness):
                 success += 1
 
         self._eval_success.append(success/len(population))

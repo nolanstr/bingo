@@ -60,17 +60,18 @@ class MultiSourceBayesFitnessFunction(FitnessFunction):
         self._create_additive_noise_clos(len(src_num_pts))
 
     def __call__(self, individual):
-        
-        n_params = individual.get_number_local_optimization_params()
+
         param_names = self.get_parameter_names(individual) + \
                         [f'std_dev{i}' for i in range(len(self._src_num_pts))]
-        priors = [ImproperUniform() for _ in range(n_params)] + \
+        priors = [ImproperUniform() for _ in range(len(param_names))] + \
                         [ImproperUniform()] * len(self._src_num_pts)
 
         try:
             proposal = self.generate_proposal_samples(individual,
                                                   self._num_particles,
                                                   param_names)
+            print(proposal)
+
         except (ValueError, np.linalg.LinAlgError, RuntimeError) as e:
             print('error with proposal creation')
             if self._return_nmll_only:
@@ -130,6 +131,7 @@ class MultiSourceBayesFitnessFunction(FitnessFunction):
         return None
 
     def do_local_opt(self, individual, subset):
+        print('Need to update this to use subset data')
         individual._needs_opt = True
         if subset is False:
             _ = self._cont_local_opt(individual)
@@ -153,13 +155,13 @@ class MultiSourceBayesFitnessFunction(FitnessFunction):
 
         for subset, len_data in enumerate(self._src_num_pts):
 
-            param_dist, cov_estimates = self._get_dists(individual, 
+            param_dists, cov_estimates = self._get_dists(individual, 
                                                         self.num_multistarts,
                                                             subset)
             noise_pdf, noise_samples = \
-                                self._get_added_noise_samples(cov_estimates,
-                                                                len_data, 
-                                                                num_samples)
+                                    self._get_added_noise_samples(cov_estimates,
+                                                                    len_data, 
+                                                                    num_samples)
             samples[:, n_params+subset] = noise_samples.flatten()
             pdf *= noise_pdf
 
@@ -173,10 +175,21 @@ class MultiSourceBayesFitnessFunction(FitnessFunction):
     
     def _get_added_noise_samples(self, cov_estimates, len_data, num_samples):
         
-        noise_std_devs = [noise_std_dev for \
-                    mean, cov, var_ols, ssqe, noise_std_dev in cov_estimates]
-        noise_dists = [norm(0, var) \
-                    for var  in noise_std_devs]
+        var = lambda ssqe: ssqe/len_data
+        var_var = lambda ssqe, mu4: \
+          (mu4/len_data) - ((var(ssqe)**2) * (len_data-3)) /\
+          (len_data*(len_data-1))
+        var_means = np.array([np.sqrt(var(ssqe)) for _, _, _, ssqe, _  \
+                                                        in cov_estimates])
+        var_vars = np.array([np.sqrt(var_var(ssqe, mu4)) for \
+                                    _, _, _, ssqe, mu4 in cov_estimates])
+        
+        if np.any(np.isnan(var_vars)):
+            var_vars[np.where(np.isnan(var_vars))] = \
+                                0.1 * var_means[np.where(np.isnan(var_vars))]
+
+        noise_dists = [norm(var_mean, var_vars) \
+                    for var_mean, var_vars  in zip(var_means, var_vars)]
         noise_pdf, noise_samples = self._get_samples_and_pdf(noise_dists,
                                                              num_samples)
         return noise_pdf, noise_samples
@@ -203,35 +216,37 @@ class MultiSourceBayesFitnessFunction(FitnessFunction):
         ssqe = np.sum((f - y) ** 2)
         var_ols = ssqe / (len(f) - num_params)
         cov = var_ols * np.linalg.inv(f_deriv.T.dot(f_deriv))
-        SNR = np.mean((y/f)**2)
-        noise_std_dev = np.mean(y**2) / SNR 
+        #mu4 = np.sum((y-f)**4) / x.shape[0]
+        #mu4 = np.sum((f - np.mean(y))**4) / x.shape[0]
+        mu4 = x.shape[0] * np.sum((f - np.mean(y))**4) / \
+                                np.sum(((f-np.mean(y))**2))**2
 
-        return individual.constants, cov, var_ols, ssqe, noise_std_dev
+        return individual.constants, cov, var_ols, ssqe, mu4
 
     def _get_dists(self, individual, num_multistarts, subset=False):
 
         param_dists = []
         cov_estimates = []
-        trigger = False
+
         for _ in range(8*num_multistarts):
-            mean, cov, var_ols, ssqe, noise_std_dev = \
-                            self.estimate_covariance(individual, subset)
+            mean, cov, var_ols, ssqe, mu4 = self.estimate_covariance(individual,
+                                                                        subset)
             try:
-                if cov.shape[0] > 0 and not np.any(np.isnan(cov)):
+                print(mean)
+                print(cov)
+                if cov.shape[0] > 0:
                     min_eig = np.min(np.real(np.linalg.eigvals(cov)))
                     if min_eig < 0:
                         cov += 1e-12 * np.eye(*cov.shape)
                 dists = mvn(mean, cov, allow_singular=True)
             except ValueError as e:
-                dists = mvn(np.zeros(len(mean)), 
-                            np.ones((len(mean), len(mean))))
-                #continue
-            cov_estimates.append((mean, cov, var_ols, ssqe, noise_std_dev))
+                dists = None
+            cov_estimates.append((mean, cov, var_ols, ssqe, mu4))
             param_dists.append(dists)
             if len(param_dists) == num_multistarts:
                 break
+
         if not param_dists:
-            #import pdb;pdb.set_trace()
             raise RuntimeError('Could not generate any valid proposal '
                                'distributions')
             return None, None
