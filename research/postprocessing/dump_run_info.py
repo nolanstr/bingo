@@ -8,6 +8,8 @@ from sklearn.model_selection import train_test_split
 from bingo.evolutionary_optimizers.parallel_archipelago import \
     load_parallel_archipelago_from_file as load_archipelago
 from bingo.symbolic_regression import ExplicitTrainingData, ExplicitRegression
+from local_optimizers.local_opt_fitness import LocalOptFitnessFunction
+from local_optimizers.scipy_optimizer import ScipyOptimizer
 
 checkpt_pattern = re.compile(r"checkpoint_(\d+)")
 
@@ -50,9 +52,15 @@ def get_sample_results_dict(sample_dir, sample_i, dataset_i, dataset_row):
 
     train_data = ExplicitTrainingData(train_X, train_y)
     train_fitness = ExplicitRegression(train_data)
+    train_fitness = LocalOptFitnessFunction(train_fitness,
+                                            ScipyOptimizer(train_fitness,
+                                                           method="lm"))
 
     test_data = ExplicitTrainingData(test_X, test_y)
     test_fitness = ExplicitRegression(test_data)
+    test_fitness = LocalOptFitnessFunction(test_fitness,
+                                           ScipyOptimizer(test_fitness,
+                                                          method="lm"))
 
     try:
         best_ind = archipelago.hall_of_fame[0]
