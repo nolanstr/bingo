@@ -8,8 +8,8 @@ from sklearn.model_selection import train_test_split
 from bingo.evolutionary_optimizers.parallel_archipelago import \
     load_parallel_archipelago_from_file as load_archipelago
 from bingo.symbolic_regression import ExplicitTrainingData, ExplicitRegression
-from local_optimizers.local_opt_fitness import LocalOptFitnessFunction
-from local_optimizers.scipy_optimizer import ScipyOptimizer
+from bingo.local_optimizers.local_opt_fitness import LocalOptFitnessFunction
+from bingo.local_optimizers.scipy_optimizer import ScipyOptimizer
 
 checkpt_pattern = re.compile(r"checkpoint_(\d+)")
 
