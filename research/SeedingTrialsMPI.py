@@ -148,7 +148,7 @@ if __name__ == '__main__':
 
         "TRAIN_PERCENT": 0.75,
         "SAMPLE_SIZE": 10,
-        "METHOD_NAME": "subgraph_seeding_1",
+        "METHOD_NAME": "subgraph_seeding_mutation",
     }
     method_name = HYPERPARAMS["METHOD_NAME"]
     sample_size = HYPERPARAMS.get("SAMPLE_SIZE", 10)
