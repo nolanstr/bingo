@@ -11,6 +11,8 @@ from bingo.symbolic_regression import ExplicitTrainingData, ExplicitRegression
 
 checkpt_pattern = re.compile(r"checkpoint_(\d+)")
 
+# TODO CLO on test and train fit
+
 
 def get_most_recent_checkpoint(sample_dir):
     largest_checkpoint_n = -1
@@ -54,7 +56,7 @@ def get_sample_results_dict(sample_dir, sample_i, dataset_i, dataset_row):
 
     try:
         best_ind = archipelago.hall_of_fame[0]
-    except KeyError:
+    except IndexError:
         best_ind = archipelago.get_best_individual()
 
     end_train_fitness = train_fitness(best_ind)
@@ -89,6 +91,9 @@ def get_dataset_info(dataset_dir, dataset_i, dataset_row):
 if __name__ == '__main__':
     output_dir = r"../seeding_output/no_seeding_1"
     data_path = r"../seeding_output/data/1000_points_100_eq_16_stack.csv"
+
+    if not os.path.exists(output_dir) or not os.path.exists(data_path):
+        raise RuntimeError("output or data dir doesn't exist")
 
     data_df = pd.read_csv(data_path)
 
