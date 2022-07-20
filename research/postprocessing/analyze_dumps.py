@@ -2,41 +2,45 @@ import numpy as np
 import pandas as pd
 from scipy.stats import ttest_ind
 
-if __name__ == '__main__':
-    output_dir = r"C:/Users/dlranda2/Desktop/GPSR/bingo/research/seeding_output/"
-    no_seed = pd.read_csv(output_dir + "no_seeding_1/results.csv")
-    pop_seed = pd.read_csv(output_dir + "subgraph_seeding_1/results.csv")
-    mut_seed = pd.read_csv(output_dir + "subgraph_seeding_mutation_1/results.csv")
 
-    good = 0
-    bad = 0
+def compare_distributions(first, second, stat, alpha=0.05):
+    first_better = 0
+    second_better = 0
     total = 0
     for dataset_i in range(100):
-        no_seed_gens = no_seed[(no_seed["dataset_i"] == dataset_i)]["generations"].values
-        mut_seed_gens = mut_seed[(mut_seed["dataset_i"] == dataset_i)]["generations"].values
+        first_stat = first[(first["dataset_i"] == dataset_i)][stat].values
+        second_stat = second[(second["dataset_i"] == dataset_i)][stat].values
 
-        if not np.mean(no_seed_gens) == 0 or not np.mean(mut_seed_gens) == 0:
-            _, no_greater = ttest_ind(no_seed_gens, mut_seed_gens,
-                                          alternative="greater")
-            _, no_less = ttest_ind(no_seed_gens, mut_seed_gens,
-                                       alternative="less")
+        if not np.mean(first_stat) == 0 or not np.mean(second_stat) == 0:
+            _, first_greater = ttest_ind(first_stat, second_stat, alternative="greater")
+            _, first_less = ttest_ind(first_stat, second_stat, alternative="less")
 
-            if no_greater < 0.05:
-                good += 1
-            if no_less < 0.05:
-                bad += 1
+            if first_greater < alpha:
+                first_better += 1
+            if first_less < alpha:
+                second_better += 1
             total += 1
-            # print(f"dataset_i: {dataset_i}, no seeding > pop seeding: {no_greater_pop < 0.05}")
-            # print(f"               no seeding < pop seeding: {no_less_pop < 0.05}")
 
-    print("good %:", float(good) / float(total))
-    print("bad %:", float(bad) / float(total))
+    print("first better (significant) %:", float(first_better) / float(total))
+    print("second better (significant) %:", float(second_better) / float(total))
 
-    _, overall_sign = ttest_ind(no_seed["generations"], mut_seed["generations"])
-    _, no_greater = ttest_ind(no_seed["generations"], mut_seed["generations"], alternative="greater")
-    _, no_less = ttest_ind(no_seed["generations"], mut_seed["generations"], alternative="less")
-    print("overall different?", overall_sign < 0.05)
-    print("overall no > mut?", no_greater < 0.05)
-    print("overall no < mut?", no_less < 0.05)
-    # print(f"no seeding > mut seeding: {no_greater_mut < 0.05}")
-    # print(f"pop seeding != mut seeding: {pop_diff_mut < 0.05}")
+    _, overall_sign = ttest_ind(first[stat], second[stat])
+    _, first_greater = ttest_ind(first[stat], second[stat], alternative="greater")
+    _, first_less = ttest_ind(first[stat], second[stat], alternative="less")
+    print("overall different?", overall_sign < alpha)
+    print("overall first > second?", first_greater < alpha)
+    print("overall first < second?", first_less < alpha)
+
+
+if __name__ == '__main__':
+    output_dir = r"C:/Users/David/Desktop/GPSR Research/bingoNASAFork/research/seeding_output/"
+    no_seed = pd.read_csv(output_dir + "no_seeding_results.csv")
+    pop_seed = pd.read_csv(output_dir + "pop_seeding_results.csv")
+    mut_seed = pd.read_csv(output_dir + "mut_seeding_results.csv")
+
+    print(mut_seed.columns)
+    # 'dataset_i', 'sample_i', 'generations', 'true_eq_complexity',
+    # 'converged', 'end_train_fitness', 'end_test_fitness',
+    # 'approx_eq_train_err', 'approx_eq_test_err'
+    
+    compare_distributions(no_seed, mut_seed, "end_test_fitness")
