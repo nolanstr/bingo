@@ -122,36 +122,8 @@ def add_seeds(hyperparam_dict, approx_eq):
 
 
 if __name__ == '__main__':
-    HYPERPARAMS = {
-        "OUTPUT_DIR": "/u/dlranda2/gpsr/src/bingo/research/output",
-        "DATA_PATH": "/u/dlranda2/gpsr/data/1000_points_100_eq_16_stack_w_seed.pkl",
-        "CONVERGENCE_CHECK_FREQ": 100,
-        "NUM_CKPT": 100,
-
-        "STACK_SIZE": 32,
-        "POPULATION_SIZE": 250,
-
-        "MAX_GENERATIONS": int(10000),
-        "FITNESS_THRESHOLD": 1e-6,
-
-        "USE_SIMPLIFICATION": True,
-        "CROSSOVER_PROB": 0.4,
-        "MUTATION_PROB": 0.4,
-        "EQUATION_MUT_PROB": 0.0,
-
-        "TERMINAL_PROB": 0.1,
-        "OPERATOR_PROB": 0.9,
-        "EQUATION_PROB": 0.0,
-        "OPERATORS": ["+", "-", "*", "/", "sin", "cos"],
-        "SEEDS": [],
-
-        "GEN_SEEDS": False,
-        "USE_SEED_FEATURES": True,
-
-        "TRAIN_PERCENT": 0.75,
-        "SAMPLE_SIZE": 10,
-        "METHOD_NAME": "subgraph_seeding_features",
-    }
+    with open(sys.argv[1], "r") as json_f:
+        HYPERPARAMS = json.load(json_f)
 
     output_dir = HYPERPARAMS["OUTPUT_DIR"]
     if not os.path.exists(output_dir):
