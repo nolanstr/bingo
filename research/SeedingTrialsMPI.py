@@ -78,7 +78,7 @@ def get_evo_opt(hyperparams, X, y):
                                       hyperparams.get("CROSSOVER_PROB", 0.4),
                                       hyperparams.get("MUTATION_PROB", 0.1))
 
-    hof = HallOfFame(5)
+    hof = HallOfFame(10)
 
     island = FitnessPredictorIsland(evo_alg, generator, hyperparams["POPULATION_SIZE"])
 
@@ -90,7 +90,8 @@ def run_trial(hyperparams, checkpoint_dir, X, y):
     evo_opt.evolve_until_convergence(
         max_generations=hyperparams.get("MAX_GENERATIONS", 1e6),
         fitness_threshold=hyperparams.get("FITNESS_THRESHOLD", 1e-6),
-        convergence_check_frequency=100,
+        convergence_check_frequency=hyperparams["CONVERGENCE_CHECK_FREQ"],
+        num_checkpoints=hyperparams["NUM_CKPT"],
         checkpoint_base_name=checkpoint_dir + "/checkpoint")
 
 
@@ -121,24 +122,22 @@ def add_seeds(hyperparam_dict, approx_eq):
 
 
 if __name__ == '__main__':
-    output_dir = r"/u/dlranda2/gpsr/output"
-    if not os.path.exists(output_dir):
-        raise RuntimeError("output directory doesn't exist, "
-                           "most likely Linux/Windows issue")
-
-    df = pd.read_pickle("/u/dlranda2/gpsr/data/1000_points_100_eq_16_stack.pkl")
-
     HYPERPARAMS = {
-        "STACK_SIZE": 16,
-        "POPULATION_SIZE": 100,
+        "OUTPUT_DIR": "/u/dlranda2/gpsr/src/bingo/research/output",
+        "DATA_PATH": "/u/dlranda2/gpsr/data/1000_points_100_eq_16_stack_w_seed.pkl",
+        "CONVERGENCE_CHECK_FREQ": 100,
+        "NUM_CKPT": 100,
+
+        "STACK_SIZE": 32,
+        "POPULATION_SIZE": 250,
 
         "MAX_GENERATIONS": int(10000),
         "FITNESS_THRESHOLD": 1e-6,
 
-        "USE_SIMPLIFICATION": False,
+        "USE_SIMPLIFICATION": True,
         "CROSSOVER_PROB": 0.4,
         "MUTATION_PROB": 0.4,
-        "EQUATION_MUT_PROB": 0.5,
+        "EQUATION_MUT_PROB": 0.0,
 
         "TERMINAL_PROB": 0.1,
         "OPERATOR_PROB": 0.9,
@@ -146,10 +145,21 @@ if __name__ == '__main__':
         "OPERATORS": ["+", "-", "*", "/", "sin", "cos"],
         "SEEDS": [],
 
+        "GEN_SEEDS": False,
+        "USE_SEED_FEATURES": True,
+
         "TRAIN_PERCENT": 0.75,
         "SAMPLE_SIZE": 10,
-        "METHOD_NAME": "subgraph_seeding_mutation",
+        "METHOD_NAME": "subgraph_seeding_features",
     }
+
+    output_dir = HYPERPARAMS["OUTPUT_DIR"]
+    if not os.path.exists(output_dir):
+        raise RuntimeError("output directory doesn't exist, "
+                           "most likely Linux/Windows issue")
+
+    df = pd.read_pickle(HYPERPARAMS["DATA_PATH"])
+
     method_name = HYPERPARAMS["METHOD_NAME"]
     sample_size = HYPERPARAMS.get("SAMPLE_SIZE", 10)
 
@@ -158,10 +168,18 @@ if __name__ == '__main__':
     for i, row in df.iterrows():
         if rank == 0:
             print("dataset:", i)
-            add_seeds(HYPERPARAMS, row["approx_eq"])
-            HYPERPARAMS["train_test_split_seed"] = np.random.randint(1000)
+            train_test_seed = np.random.randint(1000)
+        train_test_seed = communicator.bcast(train_test_seed, root=0)
+        HYPERPARAMS["train_test_split_seed"] = train_test_seed
 
-        X, y = row["true_X"], row["true_y"]
+        if HYPERPARAMS["GEN_SEEDS"]:
+            add_seeds(HYPERPARAMS, row["approx_eq"])
+
+        if HYPERPARAMS["USE_SEED_FEATURES"]:
+            X, y = row["seed_X"], row["true_y"]
+        else:
+            X, y = row["true_X"], row["true_y"]
+
         for sample_i in range(sample_size):
             if rank == 0:
                 print("\t sample:", sample_i)
