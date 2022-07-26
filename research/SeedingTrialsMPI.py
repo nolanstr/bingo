@@ -138,6 +138,7 @@ if __name__ == '__main__':
     if rank == 0:
         print("method:", method_name, end="\n\n")
     for i, row in df.iterrows():
+        train_test_seed = 1
         if rank == 0:
             print("dataset:", i)
             train_test_seed = np.random.randint(1000)
