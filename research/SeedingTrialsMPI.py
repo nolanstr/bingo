@@ -158,10 +158,9 @@ if __name__ == '__main__':
     for i, row in df.iterrows():
         if rank == 0:
             print("dataset:", i)
+            add_seeds(HYPERPARAMS, row["approx_eq"])
+            HYPERPARAMS["train_test_split_seed"] = np.random.randint(1000)
 
-        add_seeds(HYPERPARAMS, row["approx_eq"])
-
-        HYPERPARAMS["train_test_split_seed"] = np.random.randint(1000)
         X, y = row["true_X"], row["true_y"]
         for sample_i in range(sample_size):
             if rank == 0:
