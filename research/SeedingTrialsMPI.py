@@ -78,7 +78,7 @@ def get_evo_opt(hyperparams, X, y):
                                       hyperparams.get("CROSSOVER_PROB", 0.4),
                                       hyperparams.get("MUTATION_PROB", 0.1))
 
-    hof = HallOfFame(5)
+    hof = HallOfFame(10)
 
     island = FitnessPredictorIsland(evo_alg, generator, hyperparams["POPULATION_SIZE"])
 
@@ -90,7 +90,8 @@ def run_trial(hyperparams, checkpoint_dir, X, y):
     evo_opt.evolve_until_convergence(
         max_generations=hyperparams.get("MAX_GENERATIONS", 1e6),
         fitness_threshold=hyperparams.get("FITNESS_THRESHOLD", 1e-6),
-        convergence_check_frequency=100,
+        convergence_check_frequency=hyperparams["CONVERGENCE_CHECK_FREQ"],
+        num_checkpoints=hyperparams["NUM_CKPT"],
         checkpoint_base_name=checkpoint_dir + "/checkpoint")
 
 
@@ -121,47 +122,37 @@ def add_seeds(hyperparam_dict, approx_eq):
 
 
 if __name__ == '__main__':
-    output_dir = r"/u/dlranda2/gpsr/output"
+    with open(sys.argv[1], "r") as json_f:
+        HYPERPARAMS = json.load(json_f)
+
+    output_dir = HYPERPARAMS["OUTPUT_DIR"]
     if not os.path.exists(output_dir):
         raise RuntimeError("output directory doesn't exist, "
                            "most likely Linux/Windows issue")
 
-    df = pd.read_pickle("/u/dlranda2/gpsr/data/1000_points_100_eq_16_stack.pkl")
+    df = pd.read_pickle(HYPERPARAMS["DATA_PATH"])
 
-    HYPERPARAMS = {
-        "STACK_SIZE": 16,
-        "POPULATION_SIZE": 100,
-
-        "MAX_GENERATIONS": int(10000),
-        "FITNESS_THRESHOLD": 1e-6,
-
-        "USE_SIMPLIFICATION": False,
-        "CROSSOVER_PROB": 0.4,
-        "MUTATION_PROB": 0.4,
-        "EQUATION_MUT_PROB": 0.5,
-
-        "TERMINAL_PROB": 0.1,
-        "OPERATOR_PROB": 0.9,
-        "EQUATION_PROB": 0.0,
-        "OPERATORS": ["+", "-", "*", "/", "sin", "cos"],
-        "SEEDS": [],
-
-        "TRAIN_PERCENT": 0.75,
-        "SAMPLE_SIZE": 10,
-        "METHOD_NAME": "subgraph_seeding_mutation",
-    }
     method_name = HYPERPARAMS["METHOD_NAME"]
     sample_size = HYPERPARAMS.get("SAMPLE_SIZE", 10)
 
     if rank == 0:
         print("method:", method_name, end="\n\n")
     for i, row in df.iterrows():
+        train_test_seed = 1
         if rank == 0:
             print("dataset:", i)
-            add_seeds(HYPERPARAMS, row["approx_eq"])
-            HYPERPARAMS["train_test_split_seed"] = np.random.randint(1000)
+            train_test_seed = np.random.randint(1000)
+        train_test_seed = communicator.bcast(train_test_seed, root=0)
+        HYPERPARAMS["train_test_split_seed"] = train_test_seed
 
-        X, y = row["true_X"], row["true_y"]
+        if HYPERPARAMS["GEN_SEEDS"]:
+            add_seeds(HYPERPARAMS, row["approx_eq"])
+
+        if HYPERPARAMS["USE_SEED_FEATURES"]:
+            X, y = row["seed_X"], row["true_y"]
+        else:
+            X, y = row["true_X"], row["true_y"]
+
         for sample_i in range(sample_size):
             if rank == 0:
                 print("\t sample:", sample_i)
