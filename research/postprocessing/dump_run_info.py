@@ -1,5 +1,6 @@
 import json
 import os
+import sys
 import pandas as pd
 import re
 
@@ -7,13 +8,12 @@ from sklearn.model_selection import train_test_split
 
 from bingo.evolutionary_optimizers.parallel_archipelago import \
     load_parallel_archipelago_from_file as load_archipelago
-from bingo.symbolic_regression import ExplicitTrainingData, ExplicitRegression
+from bingo.symbolic_regression.explicit_regression import ExplicitTrainingData, ExplicitRegression
 from bingo.local_optimizers.local_opt_fitness import LocalOptFitnessFunction
 from bingo.local_optimizers.scipy_optimizer import ScipyOptimizer
 
 checkpt_pattern = re.compile(r"checkpoint_(\d+)")
-
-# TODO CLO on test and train fit
+dataset_pattern = re.compile(r"dataset_(\d+)")
 
 
 def get_most_recent_checkpoint(sample_dir):
@@ -97,26 +97,25 @@ def get_dataset_info(dataset_dir, dataset_i, dataset_row):
 
 
 if __name__ == '__main__':
-    output_dir = r"../seeding_output/no_seeding_1"
-    data_path = r"../seeding_output/data/1000_points_100_eq_16_stack.csv"
+    output_dir = sys.argv[1]
+    data_path = r"/u/dlranda2/gpsr/data/1000_points_100_eq_16_stack_w_seed.pkl"
 
     if not os.path.exists(output_dir) or not os.path.exists(data_path):
         raise RuntimeError("output or data dir doesn't exist")
 
-    data_df = pd.read_csv(data_path)
+    data_df = pd.read_pickle(data_path)
 
     run_info = []
 
-    dataset_i = 0
     for dataset_dir in os.listdir(output_dir):
         dataset_dir = output_dir + "/" + dataset_dir
         if os.path.isdir(dataset_dir):
+            dataset_i = int(dataset_pattern.search(dataset_dir).group(1))
             dataset_row = data_df.iloc[dataset_i]
             run_info.extend(get_dataset_info(dataset_dir,
                                              dataset_i,
                                              dataset_row))
-            dataset_i += 1
 
     results_df = pd.DataFrame(run_info)
-    print(results_df)
+    results_df = results_df.sort_values(by=["dataset_i"])
     results_df.to_csv(output_dir + "/results.csv")
