@@ -84,20 +84,24 @@ class Evaluation:
                 indv.fitness = self.fitness_function(indv)
 
     def _multiprocess_eval(self, population):
+        print('Island evalution started!')
         num_procs = self._multiprocess if isinstance(self._multiprocess, int) \
                                                                        else None
-
         with Pool(processes=num_procs) as pool:
             results = []
+            print('a')
             for i, indv in enumerate(population):
                 if self._redundant or not indv.fit_set:
                     results.append(
                             pool.apply_async(_fitness_job,
                                              (indv, self.fitness_function, i)))
+                    print('b')
             for res in results:
                 indv, i = res.get()
+                print(i)
                 population[i] = indv
-
+        
+        print('evaluation complete')
 
 def _fitness_job(individual, fitness_function, population_index):
     individual.fitness = fitness_function(individual)

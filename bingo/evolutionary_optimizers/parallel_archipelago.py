@@ -1,5 +1,4 @@
-"""The parallel implemenation of the Archipelago
-
+"""The parallel implementation of the Archipelago
 This module defines the Archipelago data structure that runs in parallel on
 multiple processors.
 """
@@ -27,7 +26,6 @@ MIGRATION = 4
 
 class ParallelArchipelago(Archipelago):
     """A collection of islands that evolves in parallel
-
     Evolution of the Archipelago involves independent evolution of Islands
     combined with periodic migration of individuals between random pairs of
     islands. Each mpi process is responsible for the evolution of a single
@@ -37,7 +35,6 @@ class ParallelArchipelago(Archipelago):
         the number of processors: i.e., scripts don't need to be changed in
         order to run with more processors. Simply run the same script with more
         mpi processes.
-
     Parameters
     ----------
     island : `Island`
@@ -47,7 +44,6 @@ class ParallelArchipelago(Archipelago):
         is non-blocking (True).
     sync_frequency : int
         How frequently to update the average age for each island. Default 10
-
     Attributes
     ----------
     island : `Island`
@@ -68,13 +64,11 @@ class ParallelArchipelago(Archipelago):
         self._sync_frequency = sync_frequency
         if self.island.hall_of_fame is None:
             self.island.hall_of_fame = deepcopy(self.hall_of_fame)
-
     def get_best_fitness(self):
         """Gets the fitness of most fit member
-
         Returns
         -------
-         :
+        fitness : numeric
             Fitness of best individual in the archipelago
         """
         best_on_proc = self.island.get_best_fitness()
@@ -83,7 +77,6 @@ class ParallelArchipelago(Archipelago):
 
     def get_best_individual(self):
         """Returns the best individual
-
         Returns
         -------
         chromosomes :
@@ -217,7 +210,6 @@ class ParallelArchipelago(Archipelago):
 
     def get_fitness_evaluation_count(self):
         """ Gets the total number of fitness evaluations performed
-
         Returns
         -------
         int :
@@ -229,7 +221,6 @@ class ParallelArchipelago(Archipelago):
 
     def get_ea_diagnostic_info(self):
         """ Gets diagnostic info from the evolutionary algorithm(s)
-
         Returns
         -------
         EaDiagnosticsSummary :
@@ -241,10 +232,8 @@ class ParallelArchipelago(Archipelago):
 
     def dump_to_file(self, filename):
         """ Dump the ParallelArchipelago object to a pickle file
-
         The file will contain a pickle dump of a list of all the processors'
         ParallelArchipelago objects.
-
         Parameters
         ----------
         filename : str
@@ -278,12 +267,10 @@ class ParallelArchipelago(Archipelago):
 
 def load_parallel_archipelago_from_file(filename):
     """ Load a ParallelArchipelago objects from a pickle file
-
     Parameters
     ----------
     filename : str
         the name of the pickle file to load
-
     Returns
     -------
     str :

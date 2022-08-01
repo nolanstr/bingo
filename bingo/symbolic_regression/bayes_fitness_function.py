@@ -1,4 +1,5 @@
 import numpy as np
+import math
 
 from scipy.stats import multivariate_normal as mvn
 from scipy.stats import invgamma
@@ -15,6 +16,7 @@ from smcpy.mcmc.vector_mcmc_kernel import VectorMCMCKernel
 from smcpy import AdaptiveSampler
 from smcpy import ImproperUniform
 from smcpy import MultiSourceNormal
+from mpi4py import MPI
 
 class BayesFitnessFunction(FitnessFunction):
 
@@ -50,7 +52,8 @@ class BayesFitnessFunction(FitnessFunction):
         self._cont_local_opt = continuous_local_opt
         self._eval_count = 0
         if random_sample_subsets != 1.0:
-            self._src_num_pts = tuple([int(src_pts*random_sample_subsets + 0.5)\
+            self._src_num_pts = tuple(
+                                [math.ceil(src_pts*random_sample_subsets)+1 \
                                               for src_pts in self._src_num_pts])
         self.subset_data = SubsetExplicitTrainingData(deepcopy(
                                                 self.training_data),
@@ -64,13 +67,13 @@ class BayesFitnessFunction(FitnessFunction):
         param_names = self.get_parameter_names(individual) + \
                         [f'std_dev{i}' for i in range(len(self._src_num_pts))]
         priors = [ImproperUniform() for _ in range(n_params)] + \
-                        [ImproperUniform()] * len(self._src_num_pts)
+                        [ImproperUniform(0, None)] * len(self._src_num_pts)
 
         try:
             proposal = self.generate_proposal_samples(individual,
                                                   self._num_particles,
                                                   param_names)
-        except (ValueError, np.linalg.LinAlgError, RuntimeError) as e:
+        except (ValueError, np.linalg.LinAlgError, RuntimeError, Exception) as e:
             print('error with proposal creation')
             if self._return_nmll_only:
                 return np.nan
@@ -87,7 +90,7 @@ class BayesFitnessFunction(FitnessFunction):
 
         mcmc_kernel = VectorMCMCKernel(vector_mcmc, param_order=param_names)
         smc = AdaptiveSampler(mcmc_kernel)
-
+        print('a')
         try:
             step_list, marginal_log_likes = \
                 smc.sample(self._num_particles, self._mcmc_steps,
@@ -107,7 +110,7 @@ class BayesFitnessFunction(FitnessFunction):
 
         nmll = -1 * (marginal_log_likes[-1] -
                      marginal_log_likes[smc.req_phi_index[0]])
-
+        print('b')
         if self._return_nmll_only:
             return nmll
         return nmll, step_list, vector_mcmc
@@ -134,7 +137,8 @@ class BayesFitnessFunction(FitnessFunction):
             _ = self._cont_local_opt(individual)
         else:
             _ = self._additive_noise_clos[subset](individual)
-        return individual
+        return None  
+        #return individual
 
     def generate_proposal_samples(self, individual, num_samples, param_names):
 
@@ -151,10 +155,10 @@ class BayesFitnessFunction(FitnessFunction):
                                                                     num_samples)
 
         for subset, len_data in enumerate(self._src_num_pts):
-
             param_dist, cov_estimates = self._get_dists(individual, 
                                                         self.num_multistarts,
                                                             subset)
+            print(f'data length: {len_data}')
             noise_pdf, noise_samples = \
                                 self._get_added_noise_samples(cov_estimates,
                                                                 len_data, 
@@ -171,11 +175,14 @@ class BayesFitnessFunction(FitnessFunction):
         return samples, pdf
     
     def _get_added_noise_samples(self, cov_estimates, len_data, num_samples):
-        
-        noise_std_devs = [noise_std_dev for \
-                    mean, cov, var_ols, ssqe, noise_std_dev in cov_estimates]
-        noise_dists = [norm(0, var) \
-                    for var  in noise_std_devs]
+        noise_dists = [invgamma((0.01 + len_data) / 2,
+                        scale=(0.01 * var_ols + ssqe) / 2)
+                       for _, _, var_ols, ssqe in cov_estimates]
+
+        #noise_std_devs = [noise_std_dev for \
+        #            mean, cov, var_ols, ssqe, noise_std_dev in cov_estimates]
+        #noise_dists = [norm(0, var) \
+        #            for var  in noise_std_devs]
         noise_pdf, noise_samples = self._get_samples_and_pdf(noise_dists,
                                                              num_samples)
         return noise_pdf, noise_samples
@@ -187,13 +194,12 @@ class BayesFitnessFunction(FitnessFunction):
         return self.subset_data.get_subset(subset)
 
     def estimate_covariance(self, individual, subset=False):
-
+        
         if subset is False:
             x = self.subset_data._x_subset_data
             y = self.subset_data._y_subset_data
         else:
             x, y = self._get_subset_data(subset)
-        
         self.do_local_opt(individual, subset)
         num_params = individual.get_number_local_optimization_params()
 
@@ -202,10 +208,7 @@ class BayesFitnessFunction(FitnessFunction):
         ssqe = np.sum((f - y) ** 2)
         var_ols = ssqe / (len(f) - num_params)
         cov = var_ols * np.linalg.inv(f_deriv.T.dot(f_deriv))
-        SNR = np.mean((y/f)**2)
-        noise_std_dev = np.mean(y**2) / SNR 
-
-        return individual.constants, cov, var_ols, ssqe, noise_std_dev
+        return individual.constants, cov, var_ols, ssqe#, noise_std_dev
 
     def _get_dists(self, individual, num_multistarts, subset=False):
 
@@ -213,24 +216,25 @@ class BayesFitnessFunction(FitnessFunction):
         cov_estimates = []
         trigger = False
         for _ in range(8*num_multistarts):
-            mean, cov, var_ols, ssqe, noise_std_dev = \
+            mean, cov, var_ols, ssqe = \
                             self.estimate_covariance(individual, subset)
             try:
                 if cov.shape[0] > 0 and not np.any(np.isnan(cov)):
                     min_eig = np.min(np.real(np.linalg.eigvals(cov)))
                     if min_eig < 0:
                         cov += 1e-12 * np.eye(*cov.shape)
-                dists = mvn(mean, cov, allow_singular=True)
+                if individual.get_number_local_optimization_params() == 0:
+                    dists = None
+                else:
+                    dists = mvn(mean, cov, allow_singular=True)
             except ValueError as e:
                 dists = mvn(np.zeros(len(mean)), 
-                            np.ones((len(mean), len(mean))))
-                #continue
-            cov_estimates.append((mean, cov, var_ols, ssqe, noise_std_dev))
+                            np.eye(len(mean)), allow_singular=True)
+            cov_estimates.append((mean, cov, var_ols, ssqe))
             param_dists.append(dists)
             if len(param_dists) == num_multistarts:
                 break
         if not param_dists:
-            #import pdb;pdb.set_trace()
             raise RuntimeError('Could not generate any valid proposal '
                                'distributions')
             return None, None
