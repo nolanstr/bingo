@@ -1,0 +1,33 @@
+{
+    "OUTPUT_DIR": "/u/dlranda2/gpsr/src/bingo/research/output",
+    "DATA_PATH": "/u/dlranda2/gpsr/data/seeding_cos_medium.pkl",
+
+    "CONVERGENCE_CHECK_FREQ": 100,
+    "NUM_CKPT": 100,
+    "MAX_GENERATIONS": 10000,
+    "FITNESS_THRESHOLD": 1e-06,
+
+    "STACK_SIZE": 32,
+    "POPULATION_SIZE": 250,
+
+    "USE_SIMPLIFICATION": true,
+
+    "CROSSOVER_PROB": 0.4,
+    "MUTATION_PROB": 0.4,
+    "EQUATION_MUT_PROB": 0.5,
+
+    "TERMINAL_PROB": 0.1,
+    "OPERATOR_PROB": 0.9,
+    "EQUATION_PROB": 0.0,
+
+    "OPERATORS": ["+", "-", "*", "/", "sin", "cos"],
+
+    "SEEDS": ["cos(X_1 + X_1)"],
+    "GEN_SEEDS": false,
+
+    "USE_SEED_FEATURES": false,
+
+    "TRAIN_PERCENT": 0.75,
+    "SAMPLE_SIZE": 30,
+    "METHOD_NAME": "subgraph_mutation"
+}
