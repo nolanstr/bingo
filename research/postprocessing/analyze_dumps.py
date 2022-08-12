@@ -11,15 +11,14 @@ def compare_distributions(first, second, stat, alpha=0.05):
         first_stat = first[(first["dataset_i"] == dataset_i)][stat].values
         second_stat = second[(second["dataset_i"] == dataset_i)][stat].values
 
-        if not np.mean(first_stat) == 0 or not np.mean(second_stat) == 0:
-            _, first_greater = ttest_ind(first_stat, second_stat, alternative="greater")
-            _, first_less = ttest_ind(first_stat, second_stat, alternative="less")
+        _, first_greater = ttest_ind(first_stat, second_stat, alternative="greater")
+        _, first_less = ttest_ind(first_stat, second_stat, alternative="less")
 
-            if first_greater < alpha:
-                first_greater_total += 1
-            if first_less < alpha:
-                second_greater_total += 1
-            total += 1
+        if first_greater < alpha:
+            first_greater_total += 1
+        if first_less < alpha:
+            second_greater_total += 1
+        total += 1
 
     print("first greater (significant) %:", float(first_greater_total) / float(total))
     print("second greater (significant) %:", float(second_greater_total) / float(total))
