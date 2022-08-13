@@ -155,10 +155,10 @@ class BayesFitnessFunction(FitnessFunction):
                                                                     num_samples)
 
         for subset, len_data in enumerate(self._src_num_pts):
+            print(f'data length: {len_data}')
             param_dist, cov_estimates = self._get_dists(individual, 
                                                         self.num_multistarts,
                                                             subset)
-            print(f'data length: {len_data}')
             noise_pdf, noise_samples = \
                                 self._get_added_noise_samples(cov_estimates,
                                                                 len_data, 
