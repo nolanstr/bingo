@@ -90,7 +90,6 @@ class BayesFitnessFunction(FitnessFunction):
 
         mcmc_kernel = VectorMCMCKernel(vector_mcmc, param_order=param_names)
         smc = AdaptiveSampler(mcmc_kernel)
-        print('a')
         try:
             step_list, marginal_log_likes = \
                 smc.sample(self._num_particles, self._mcmc_steps,
@@ -110,7 +109,6 @@ class BayesFitnessFunction(FitnessFunction):
 
         nmll = -1 * (marginal_log_likes[-1] -
                      marginal_log_likes[smc.req_phi_index[0]])
-        print('b')
         if self._return_nmll_only:
             return nmll
         return nmll, step_list, vector_mcmc
@@ -155,7 +153,6 @@ class BayesFitnessFunction(FitnessFunction):
                                                                     num_samples)
 
         for subset, len_data in enumerate(self._src_num_pts):
-            print(f'data length: {len_data}')
             param_dist, cov_estimates = self._get_dists(individual, 
                                                         self.num_multistarts,
                                                             subset)

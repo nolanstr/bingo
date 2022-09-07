@@ -89,16 +89,13 @@ class Evaluation:
                                                                        else None
         with Pool(processes=num_procs) as pool:
             results = []
-            print('a')
             for i, indv in enumerate(population):
                 if self._redundant or not indv.fit_set:
                     results.append(
                             pool.apply_async(_fitness_job,
                                              (indv, self.fitness_function, i)))
-                    print('b')
             for res in results:
                 indv, i = res.get()
-                print(i)
                 population[i] = indv
         
         print('evaluation complete')

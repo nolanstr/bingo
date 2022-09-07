@@ -247,8 +247,8 @@ class ParallelArchipelago(Archipelago):
 
         if self.comm_rank == 0:
             with open(filename, "wb") as dump_file:
-                dill.dump(all_par_archs, dump_file,
-                          protocol=dill.HIGHEST_PROTOCOL)
+                dill.dump(all_par_archs, dump_file)#,
+                          #protocol=dill.HIGHEST_PROTOCOL)
             LOGGER.log(DETAILED_INFO, "Saved successfully")
 
     def _copy_without_mpi(self):

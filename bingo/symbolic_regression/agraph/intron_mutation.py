@@ -19,6 +19,7 @@ NODE_MUTATION = 1
 PARAMETER_MUTATION = 2
 PRUNE_MUTATION = 3
 FORK_MUTATION = 4
+INTRON_MUTATION = 5
 
 
 class AGraphMutation(Mutation):
@@ -63,23 +64,26 @@ class AGraphMutation(Mutation):
                          node_probability={">=": 0, "<=": 1},
                          parameter_probability={">=": 0, "<=": 1},
                          prune_probability={">=": 0, "<=": 1},
-                         fork_probability={">=": 0, "<=": 1})
-    def __init__(self, component_generator, command_probability=0.16,
-                 node_probability=0.16, parameter_probability=0.16,
-                 prune_probability=0.16, fork_probability=0.16,
-                 rand_introns_probability=0.2):
+                         fork_probability={">=": 0, "<=": 1},
+                         intron_probability={">=": 0, "<=": 1})
+    def __init__(self, component_generator, command_probability=1/6,
+                 node_probability=1/6, parameter_probability=1/6,
+                 prune_probability=1/6, fork_probability=1/6,
+                 intron_probability=1/6):
         self._component_generator = component_generator
         self._mutation_function_pmf = \
             ProbabilityMassFunction([self._mutate_command,
                                      self._mutate_node,
                                      self._mutate_parameters,
                                      self._prune_branch,
-                                     self._fork_mutation],
+                                     self._fork_mutation,
+                                     self._intron_mutation],
                                     [command_probability,
                                      node_probability,
                                      parameter_probability,
                                      prune_probability,
-                                     fork_probability])
+                                     fork_probability,
+                                     intron_probability])
         self._last_mutation_location = None
         self._last_mutation_type = None
 
@@ -230,7 +234,20 @@ class AGraphMutation(Mutation):
                 if p_2 == mutation_location:
                     individual.mutable_command_array[
                         mutation_location + i, 2] = pruned_param
+    
+    def _intron_mutation(self, individual):
+        """
+        Mutation meant to focus on changing the non-impacting genetic
+        information for an individual so that it will impact crossover and other
+        types of mutation.
+        """
+        
+        utilized_commands = np.array(individual.get_utilized_commands())
 
+        for row in np.where(utilized_commands == False)[0]:
+            individual.mutable_command_array[row] = \
+                            self._component_generator.random_command(row)
+    
     @staticmethod
     def _get_random_prune_location(individual):
         utilized_commands = individual.get_utilized_commands()
