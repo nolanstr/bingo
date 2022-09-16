@@ -51,10 +51,21 @@ class BayesFitnessFunction(FitnessFunction):
 
         self._cont_local_opt = continuous_local_opt
         self._eval_count = 0
-        if random_sample_subsets != 1.0:
+        if isinstance(random_sample_subsets, int):
+            if random_sample_subsets != 1.0:
+                self._src_num_pts = tuple(
+                            [math.ceil(src_pts*random_sample_subsets) \
+                                          for src_pts in self._src_num_pts])
+            print('a')
+        elif isinstance(random_sample_subsets, list) or \
+                            isinstance(random_sample_subsets, tuple) or \
+                            isinstance(random_sample_subsets, np.ndarray):
+            assert(len(random_sample_subsets)==len(self._src_num_pts)), \
+                    'length of random sample subsets must match src num pts'
+            print('b')
             self._src_num_pts = tuple(
-                                [math.ceil(src_pts*random_sample_subsets)+1 \
-                                              for src_pts in self._src_num_pts])
+            [math.ceil(self._src_num_pts[i]*random_sample_subsets[i]) \
+                                  for i in range(len(self._src_num_pts))])
         self.subset_data = SubsetExplicitTrainingData(deepcopy(
                                                 self.training_data),
                                                 self._full_src_num_pts,
@@ -73,7 +84,8 @@ class BayesFitnessFunction(FitnessFunction):
             proposal = self.generate_proposal_samples(individual,
                                                   self._num_particles,
                                                   param_names)
-        except (ValueError, np.linalg.LinAlgError, RuntimeError, Exception) as e:
+        except (ValueError, np.linalg.LinAlgError, RuntimeError, Exception) \
+                                                                         as e:
             print('error with proposal creation')
             if self._return_nmll_only:
                 return np.nan
