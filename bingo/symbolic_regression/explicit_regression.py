@@ -155,6 +155,13 @@ class SubsetExplicitTrainingData(TrainingData):
 
         self.random_sample(src_num_pts, sample_subsets_sizes)
 
+    def get_dataset(self, subset=None):
+        
+        if subset is None:
+            return self._x_subset_data, self._y_subset_data
+        else:
+            return self.get_subset(subset)
+
     @property
     def x(self):
         """independent x data"""
@@ -166,7 +173,6 @@ class SubsetExplicitTrainingData(TrainingData):
         return self._y
     
     def random_sample(self, src_num_pts, sample_subsets_sizes):
-
         self._split_data_into_subsets(src_num_pts)
         
         for i, size in enumerate(sample_subsets_sizes):
@@ -191,7 +197,6 @@ class SubsetExplicitTrainingData(TrainingData):
         
         self._x_subsets = []
         self._y_subsets = []
-
         idxs = np.append(0, np.cumsum(src_num_pts))
 
         for subset in range(len(src_num_pts)): 
