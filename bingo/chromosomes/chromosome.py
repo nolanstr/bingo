@@ -36,6 +36,7 @@ class Chromosome(metaclass=ABCMeta):
     def __init__(self, genetic_age=0, fitness=None, fit_set=False):
         self._genetic_age = genetic_age
         self._fitness = fitness
+        self._fitness_estimates = []
         self._fit_set = fit_set
 
     @property
@@ -43,9 +44,19 @@ class Chromosome(metaclass=ABCMeta):
         """numeric or tuple of numeric: The fitness of the individual"""
         return self._fitness
 
+    @property
+    def fitness_estimates(self):
+        """numeric or tuple of numeric: The fitness of the individual"""
+        return self._fitness_estimates
+
     @fitness.setter
     def fitness(self, fitness):
         self._fitness = fitness
+        self._fit_set = True
+
+    @fitness_estimates.setter
+    def fitness_estimates(self, fitness):
+        self._fitness_estimates.append(fitness)
         self._fit_set = True
 
     @property

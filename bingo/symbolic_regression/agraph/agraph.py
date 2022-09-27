@@ -144,6 +144,7 @@ class AGraph(Equation, continuous_local_opt.ChromosomeInterface):
     def _notify_modification(self):
         self._modified = True
         self._fitness = None
+        self._fitness_estimates = []
         self._fit_set = False
 
     def _update(self):
@@ -399,6 +400,7 @@ class AGraph(Equation, continuous_local_opt.ChromosomeInterface):
         # pylint: disable=protected-access
         agraph_duplicate._genetic_age = self._genetic_age
         agraph_duplicate._fitness = self._fitness
+        agraph_duplicate._fitness_estimates = self._fitness_estimates
         agraph_duplicate._fit_set = self._fit_set
         agraph_duplicate._command_array = np.copy(self.command_array)
         agraph_duplicate._simplified_command_array = \

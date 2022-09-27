@@ -56,13 +56,11 @@ class BayesFitnessFunction(FitnessFunction):
                 self._src_num_pts = tuple(
                             [math.ceil(src_pts*random_sample_subsets) \
                                           for src_pts in self._src_num_pts])
-            print('a')
         elif isinstance(random_sample_subsets, list) or \
                             isinstance(random_sample_subsets, tuple) or \
                             isinstance(random_sample_subsets, np.ndarray):
             assert(len(random_sample_subsets)==len(self._src_num_pts)), \
                     'length of random sample subsets must match src num pts'
-            print('b')
             self._src_num_pts = tuple(
             [math.ceil(self._src_num_pts[i]*random_sample_subsets[i]) \
                                   for i in range(len(self._src_num_pts))])
@@ -142,7 +140,7 @@ class BayesFitnessFunction(FitnessFunction):
         return None
 
     def do_local_opt(self, individual, subset):
-        individual._needs_opt = True
+        #individual._needs_opt = True
         if subset is False:
             _ = self._cont_local_opt(individual)
         else:

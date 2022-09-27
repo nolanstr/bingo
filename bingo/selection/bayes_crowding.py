@@ -37,3 +37,35 @@ class BayesCrowding(GeneralizedCrowding):
         else:
             prob = child.fitness / (parent.fitness + child.fitness)
         return child if np.random.random() < prob else parent
+
+class StoredFitnessBayesCrowding(GeneralizedCrowding):
+    """Crowding using Bayesian model selection where models can have more than
+    one fitness estimate
+
+    Fitness of individuals are assumed to be a measure of model evidence, such
+    that a ratio between two fitness values gives the Bayes Factor.
+
+    Parameters
+    ----------
+    logscale : bool
+        Whether fitnesses of the individuals is in log space. Note that
+        fitnesses are assumed to be *negative* log probabilities. Default True.
+    """
+    def __init__(self, logscale=True):
+        self._logscale = logscale
+        super().__init__()
+
+    def _return_most_fit(self, child, parent):
+        if np.all(np.isnan(parent.fitness_estimates)):
+            return child
+        if np.all(np.isnan(child.fitness_estimates)):
+            return parent
+
+        if self._logscale:
+            prob = np.exp(np.nanmean(parent.fitness_estimates) - \
+                                        np.nanmean(child.fitness_estimates))
+            prob = prob / (prob + 1)
+        else:
+            prob = np.nanmean(child.fitness_estimates) / \
+            (np.nanmean(parent.fitness_estimates) + np.nanmean(child.fitness))
+        return child if np.random.random() < prob else parent

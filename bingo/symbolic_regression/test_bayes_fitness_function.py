@@ -51,8 +51,6 @@ class TestBayesFitnessFunction(FitnessFunction):
                                                 self._full_multisource_num_pts,
                                                 self._multisource_num_pts)
 
-        print(len(self._full_multisource_num_pts))
-
     def __call__(self, individual, return_nmll_only=True):
         
         n_params = individual.get_number_local_optimization_params()
@@ -176,8 +174,8 @@ class TestBayesFitnessFunction(FitnessFunction):
         individual._needs_opt = True
         #I only have the model being re-optimized on the whole dataset
         if subset is None:
-            #_ = self._cont_local_opt(individual)
-            print('COMMENTED OUT RE OPT OF MODEL FOR SR1 TEST')
+            _ = self._cont_local_opt(individual)
+            #print('COMMENTED OUT RE OPT OF MODEL FOR SR1 TEST')
 
     def generate_proposal_samples(self, individual, num_samples, param_names):
 
@@ -240,8 +238,6 @@ class TestBayesFitnessFunction(FitnessFunction):
         return noise_pdf, noise_samples
 
     def randomize_subsets(self):
-        print(self._full_multisource_num_pts)
-        print('are we HERE???')
         self.subset_data.random_sample(self._full_multisource_num_pts, 
                                                 self._multisource_num_pts)
 

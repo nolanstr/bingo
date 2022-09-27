@@ -127,6 +127,7 @@ class EvolutionaryOptimizer(metaclass=ABCMeta):
             self._update_best_fitness()
             self._update_checkpoints(checkpoint_base_name, num_checkpoints)
             self._log_optimization(start_time)
+            print(f'Generational age: {self.generational_age}')
 
         _exit, result = self._check_exit_criteria(fitness_threshold,
                                                   stagnation_generations,
