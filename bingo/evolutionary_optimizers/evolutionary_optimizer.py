@@ -122,12 +122,12 @@ class EvolutionaryOptimizer(metaclass=ABCMeta):
         self._update_checkpoints(checkpoint_base_name, num_checkpoints,
                                  reset=True)
         self._log_optimization(start_time)
+
         while self.generational_age - self._starting_age < min_generations:
             self.evolve(convergence_check_frequency)
             self._update_best_fitness()
             self._update_checkpoints(checkpoint_base_name, num_checkpoints)
             self._log_optimization(start_time)
-            print(f'Generational age: {self.generational_age}')
 
         _exit, result = self._check_exit_criteria(fitness_threshold,
                                                   stagnation_generations,
@@ -291,14 +291,15 @@ class EvolutionaryOptimizer(metaclass=ABCMeta):
         suppress_logging : bool (optional)
             Used to manually suppress the logging output of this function
         """
+        print('a')
         start_time = datetime.now()
         self._do_evolution(num_generations)
         elapsed_time = datetime.now() - start_time
         self._times.append(elapsed_time)
+        print('b')
         if hall_of_fame_update:
             self.update_hall_of_fame()
         if not suppress_logging:
-            print('sadfasfd')
             self._log_evolution(start_time)
 
     def _log_evolution(self, start_time):
