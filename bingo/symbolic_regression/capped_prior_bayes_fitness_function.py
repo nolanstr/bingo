@@ -60,6 +60,7 @@ class TestBayesFitnessFunction(FitnessFunction):
             proposal = self.generate_proposal_samples(individual,
                                                   self._num_particles,
                                                   param_names)
+            print('a')
         except (ValueError, np.linalg.LinAlgError, RuntimeError, Exception) \
                                                                          as e:
             print('error with proposal creation')
@@ -70,7 +71,7 @@ class TestBayesFitnessFunction(FitnessFunction):
                         #[ImproperUniform(0, None)] * len(self._multisource_num_pts)
         
         for subset in range(len(self._multisource_num_pts)):
-            upper_cap = 3 * proposal[0][f'std_dev{subset}'].mean()
+            upper_cap = proposal[0][f'std_dev{subset}'].max() * 3
             priors.append(ImproperUniform(0, upper_cap))
             print(upper_cap)
 
@@ -241,7 +242,7 @@ class TestBayesFitnessFunction(FitnessFunction):
 
         noise_pdf, noise_samples = self._get_samples_and_pdf(noise_dists,
                                                              num_samples)
-        return noise_pdf, noise_samples
+        return noise_pdf1, noise_samples1*.10
 
     def randomize_subsets(self):
         self.subset_data.random_sample(self._full_multisource_num_pts, 
