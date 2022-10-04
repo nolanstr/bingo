@@ -12,6 +12,7 @@ except (ImportError, KeyError, ModuleNotFoundError) as e:
     from .agraph import AGraph
     BINGOCPP = False
 from .agraph import AGraph as pyAGraph
+from .agraph import force_use_of_python_simplification
 from ...chromosomes.generator import Generator
 from ...util.argument_validation import argument_validation
 
@@ -37,6 +38,9 @@ class AGraphGenerator(Generator):
         else:
             self._backend_generator_function = self._generator_function
 
+        if use_simplification:
+            force_use_of_python_simplification()
+
     def __call__(self):
         """Generates random agraph individual.
 
@@ -59,6 +63,20 @@ class AGraphGenerator(Generator):
 
     def _create_command_array(self):
         command_array = np.empty((self.agraph_size, 3), dtype=int)
-        for i in range(self.agraph_size):
-            command_array[i] = self.component_generator.random_command(i)
+        commands_to_generate = self.agraph_size
+        i = 0
+        while commands_to_generate > 0:
+            new_command = self.component_generator.random_command_w_eq(i)
+
+            attempts = 0
+            while commands_to_generate < new_command.shape[0]:
+                if attempts > 99:
+                    raise RuntimeError(
+                        "Couldn't generate small enough agraph command")
+                attempts += 1
+                new_command = self.component_generator.random_command_w_eq(i)
+
+            command_array[i:i+new_command.shape[0]] = new_command
+            commands_to_generate -= new_command.shape[0]
+            i += new_command.shape[0]
         return command_array

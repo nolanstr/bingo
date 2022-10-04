@@ -19,6 +19,7 @@ NODE_MUTATION = 1
 PARAMETER_MUTATION = 2
 PRUNE_MUTATION = 3
 FORK_MUTATION = 4
+EQ_MUTATION = 5
 
 
 class AGraphMutation(Mutation):
@@ -63,22 +64,26 @@ class AGraphMutation(Mutation):
                          node_probability={">=": 0, "<=": 1},
                          parameter_probability={">=": 0, "<=": 1},
                          prune_probability={">=": 0, "<=": 1},
-                         fork_probability={">=": 0, "<=": 1})
+                         fork_probability={">=": 0, "<=": 1},
+                         equation_probability={">=": 0, "<=": 1})
     def __init__(self, component_generator, command_probability=0.2,
                  node_probability=0.2, parameter_probability=0.2,
-                 prune_probability=0.2, fork_probability=0.2):
+                 prune_probability=0.2, fork_probability=0.2,
+                 equation_probability=0):
         self._component_generator = component_generator
         self._mutation_function_pmf = \
             ProbabilityMassFunction([self._mutate_command,
                                      self._mutate_node,
                                      self._mutate_parameters,
                                      self._prune_branch,
-                                     self._fork_mutation],
+                                     self._fork_mutation,
+                                     self._eq_mutation],
                                     [command_probability,
                                      node_probability,
                                      parameter_probability,
                                      prune_probability,
-                                     fork_probability])
+                                     fork_probability,
+                                     equation_probability])
         self._last_mutation_location = None
         self._last_mutation_type = None
 
@@ -341,10 +346,12 @@ class AGraphMutation(Mutation):
         return stack
 
     @staticmethod
-    def _move_utilized_commands(stack, utilized_commands, mutation_location):
+    def _move_utilized_commands(stack, utilized_commands, mutation_location,
+                                comparator=lambda i, loc: i <= loc):
         """
         Prepares a stack for fork mutation by moving
-        utilized commands that occur before/at the mutation_location
+        utilized commands that occur before/at (depending on comparator,
+        <= for before and at, < for just before) the mutation_location
         to the front of the stack, unutilized commands to the middle
         of the stack, and utilized commands that occur after the
         mutation_location to the end of the stack
@@ -363,7 +370,7 @@ class AGraphMutation(Mutation):
         for i, stack_util_index_tuple in \
                 enumerate(zip(stack, utilized_commands, indices)):
             if stack_util_index_tuple[1]:  # if utilized
-                if i <= mutation_location:
+                if comparator(i, mutation_location):
                     before_mutation_location.append(stack_util_index_tuple)
                 else:
                     after_mutation_location.append(stack_util_index_tuple)
@@ -413,6 +420,10 @@ class AGraphMutation(Mutation):
         for i in range(1, 3):
             indices_to_fix = \
                 indices[np.where(stack[non_terminals][:, i] >= indices)[0]]
+            if 0 in indices_to_fix:  # case where we have a non-terminal at i=0
+                stack[0] = self._component_generator.random_terminal_command()
+                indices_to_fix = np.delete(indices_to_fix,
+                                           np.where(indices_to_fix == 0))
             if len(indices_to_fix) > 0:
                 stack[:, i][indices_to_fix] = np.vectorize(
                         self._component_generator.random_operator_parameter)(
@@ -440,3 +451,41 @@ class AGraphMutation(Mutation):
                 operator = self._component_generator.random_operator()
                 attempts += 1
         return operator
+
+    @staticmethod
+    def _get_eq_mutation_loc(utilized_commands: list):
+        utilized_idx = np.array(utilized_commands[:-1]).nonzero()[0]
+        if len(utilized_idx) == 0:
+            return None
+        else:
+            return np.random.choice(utilized_idx)
+
+    def _eq_mutation(self, individual):
+        eq = self._component_generator.random_equation(0)
+        utilized_commands = individual.get_utilized_commands()
+        mutation_location = self._get_eq_mutation_loc(utilized_commands)
+
+        self._last_mutation_location = mutation_location
+        self._last_mutation_type = EQ_MUTATION
+
+        if len(eq) > utilized_commands.count(False) \
+                or mutation_location is None:
+            return
+        else:
+            stack = individual.mutable_command_array
+
+            new_stack, new_utilized_commands, index_shifts, \
+            mutated_cmd_idx, unutilized_range = \
+                self._move_utilized_commands(
+                    stack, utilized_commands, mutation_location,
+                    comparator=lambda i, loc: i < loc)
+
+            index_shifts[mutation_location] = mutated_cmd_idx
+            self._fix_indices(new_stack, new_utilized_commands,
+                                  index_shifts)
+
+            eq = self._component_generator._shift_command_array(
+                eq, mutated_cmd_idx - len(eq) + 1)
+            new_stack[mutated_cmd_idx - len(eq) + 1: mutated_cmd_idx + 1] = eq
+
+            individual.command_array = new_stack
