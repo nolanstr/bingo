@@ -10,8 +10,8 @@ from sklearn.model_selection import train_test_split
 
 from bingo.evolutionary_optimizers.fitness_predictor_island import \
     FitnessPredictorIsland
-from bingo.evolutionary_algorithms.deterministic_crowding import \
-    DeterministicCrowdingEA
+from bingo.evolutionary_algorithms.generalized_crowding import \
+    GeneralizedCrowdingEA
 from bingo.stats.hall_of_fame import HallOfFame
 from bingo.symbolic_regression.agraph.generator import AGraphGenerator
 from bingo.symbolic_regression.agraph.component_generator import \
@@ -64,7 +64,7 @@ def get_evo_opt(hyperparams, X, y):
     crossover = AGraphCrossover()
     mutation = AGraphMutation(component_generator)
 
-    evo_alg = DeterministicCrowdingEA(evaluator, crossover, mutation,
+    evo_alg = GeneralizedCrowdingEA(evaluator, crossover, mutation,
                                       hyperparams.get("CROSSOVER_PROB", 0.4),
                                       hyperparams.get("MUTATION_PROB", 0.1))
 

@@ -152,6 +152,9 @@ class SubsetExplicitTrainingData(TrainingData):
     def __init__(self, training_data, src_num_pts, sample_subsets_sizes):
         self._x = training_data.x
         self._y = training_data.y
+        
+        self.src_num_pts = src_num_pts
+        self.sample_subsets_sizes = sample_subsets_sizes
 
         self.random_sample(src_num_pts, sample_subsets_sizes)
 
@@ -172,7 +175,12 @@ class SubsetExplicitTrainingData(TrainingData):
         """dependent y data"""
         return self._y
     
-    def random_sample(self, src_num_pts, sample_subsets_sizes):
+    def random_sample(self, src_num_pts=None, sample_subsets_sizes=None):
+        if src_num_pts is None:
+            src_num_pts = self.src_num_pts
+        if sample_subsets_sizes is None:
+            sample_subsets_sizes = self.sample_subsets_sizes
+
         self._split_data_into_subsets(src_num_pts)
         
         for i, size in enumerate(sample_subsets_sizes):

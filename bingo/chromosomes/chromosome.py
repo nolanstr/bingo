@@ -33,7 +33,8 @@ class Chromosome(metaclass=ABCMeta):
     fit_set : bool
               Whether the fitness has been calculated for the individual
     """
-    def __init__(self, genetic_age=0, fitness=None, fit_set=False):
+    def __init__(self, genetic_age=0, fitness=None, fitness_estimates=None,
+                                                                fit_set=False):
         self._genetic_age = genetic_age
         self._fitness = fitness
         self._fitness_estimates = []

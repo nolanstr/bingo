@@ -94,6 +94,8 @@ class TestBayesFitnessFunction(FitnessFunction):
                 return np.nan
             return np.nan, None, None
 
+        scale = self.scale(individual, step_list)
+        print(f'Scale: {scale}')
         max_idx = np.argmax(step_list[-1].log_likes)
         maps = step_list[-1].params[max_idx]
         individual.set_local_optimization_params(maps[:-len(self._multisource_num_pts)])
@@ -101,8 +103,21 @@ class TestBayesFitnessFunction(FitnessFunction):
         nmll = -1 * (marginal_log_likes[-1] -
                      marginal_log_likes[smc.req_phi_index[0]])
         if return_nmll_only:
-            return nmll
+            try:
+                return abs(nmll) / scale
+            except:
+                return np.nan
+
         return nmll, step_list, vector_mcmc
+    
+    def scale(self, individual, step_list):
+        
+        x, cred, pred = self.get_cred_pred(individual, step_list)
+        
+        cred_sum = np.sum(abs(cred[:,0] - cred[:,1]))
+        pred_sum = np.sum(abs(pred[:,0] - pred[:,1]))
+        
+        return cred_sum / pred_sum
 
     def _set_smc_hyperparams(self, smc_hyperparams):
         
@@ -307,22 +322,6 @@ class TestBayesFitnessFunction(FitnessFunction):
         return individual.evaluate_equation_at(
                                     self.subset_data._x_subset_data).T
 
-    @property
-    def eval_count(self):
-        return self._eval_count + self._cont_local_opt.eval_count
-
-    @eval_count.setter
-    def eval_count(self, value):
-        self._eval_count = value - self._cont_local_opt.eval_count
-
-    @property
-    def training_data(self):
-        return self._cont_local_opt.training_data
-
-    @training_data.setter
-    def training_data(self, training_data):
-        self._cont_local_opt.training_data = training_data
-
     def get_cred_pred(self, ind, step_list, subset=None, bounds=0.05):
 
         n_params = ind.get_number_local_optimization_params()
@@ -359,4 +358,20 @@ class TestBayesFitnessFunction(FitnessFunction):
                                     weight_col, pred_out_sort[:,i]))
 
         return x, np.array(cred_y), np.array(pred_y)
+
+    @property
+    def eval_count(self):
+        return self._eval_count + self._cont_local_opt.eval_count
+
+    @eval_count.setter
+    def eval_count(self, value):
+        self._eval_count = value - self._cont_local_opt.eval_count
+
+    @property
+    def training_data(self):
+        return self._cont_local_opt.training_data
+
+    @training_data.setter
+    def training_data(self, training_data):
+        self._cont_local_opt.training_data = training_data
 
