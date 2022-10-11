@@ -15,7 +15,8 @@ from bingo.symbolic_regression.explicit_regression import \
 from smcpy.mcmc.vector_mcmc import VectorMCMC
 from smcpy.mcmc.vector_mcmc_kernel import VectorMCMCKernel
 from smcpy import AdaptiveSampler
-from smcpy import ImproperUniform
+from smcpy import ImproperUniform, \
+                  InvGamma
 from smcpy import MultiSourceNormal
 from mpi4py import MPI
 
@@ -27,7 +28,10 @@ BASE_SMC_HYPERPARAMS = {'num_particles':150,
 BASE_MULTISOURCE_INFO = None
 RANDOM_SAMPLE_INFO = None
 
-class TestBayesFitnessFunction(FitnessFunction):
+noise_priors = {'ImproperUniform':ImproperUniform(0,None),
+                'InverseGamma':InvGamma()}
+
+class BayesFitnessFunction(FitnessFunction):
     """
     Currently we are only using a uniformly weighted proposal --> This can
     change in the future.
@@ -35,7 +39,8 @@ class TestBayesFitnessFunction(FitnessFunction):
     def __init__(self, continuous_local_opt, smc_hyperparams={},
                  multisource_info=None,
                  random_sample_info=None,
-                 num_multistarts=4):
+                 num_multistarts=4,
+                 noise_prior='ImproperUniform'):
         
         self._cont_local_opt = continuous_local_opt
         self._set_smc_hyperparams(smc_hyperparams)
@@ -45,6 +50,7 @@ class TestBayesFitnessFunction(FitnessFunction):
         self._num_multistarts = num_multistarts
         self._norm_phi = 1 / np.sqrt(continuous_local_opt.training_data.x.shape[0])
         self._eval_count = 0
+        self._noise_prior = noise_prior
 
         self.subset_data = SubsetExplicitTrainingData(deepcopy(
                                                 self.training_data),
@@ -57,12 +63,17 @@ class TestBayesFitnessFunction(FitnessFunction):
         param_names = self.get_parameter_names(individual) + \
                         [f'std_dev{i}' for i in range(len(self._multisource_num_pts))]
         priors = [ImproperUniform() for _ in range(n_params)] + \
-                        [ImproperUniform(0, None)] * len(self._multisource_num_pts)
-
+                        [noise_priors[self._noise_prior]] * len(self._multisource_num_pts)
+            
         try:
             proposal = self.generate_proposal_samples(individual,
                                                   self._num_particles,
                                                   param_names)
+            if self._noise_prior == 'InverseGamma':
+                priors = self.upate_priors_for_inv_gamma(individual,
+                                                         range(len(self._multisource_num_pts)),
+                                                         priors)
+
         except (ValueError, np.linalg.LinAlgError, RuntimeError, Exception) \
                                                                          as e:
             print('error with proposal creation')
@@ -117,8 +128,8 @@ class TestBayesFitnessFunction(FitnessFunction):
     def _set_multisource_info(self, multisource_info):
         
         if multisource_info is None:
-            multisource_num_pts = \
-                    tuple([continuous_local_opt.training_data.x.shape[0]])
+            multisource_info = \
+                    tuple([self._cont_local_opt.training_data.x.shape[0]])
         
         self._multisource_num_pts = tuple(multisource_info)
         self._full_multisource_num_pts = tuple(multisource_info)
@@ -184,6 +195,7 @@ class TestBayesFitnessFunction(FitnessFunction):
         cov_estimates = []
         
         n_params = individual.get_number_local_optimization_params()
+
         if n_params > 0:
 
             param_dists, cov_estimates = self._get_dists(individual)
@@ -194,6 +206,7 @@ class TestBayesFitnessFunction(FitnessFunction):
         for subset, len_data in enumerate(self._multisource_num_pts):
             param_dist, cov_estimates = self._get_dists(individual, 
                                                             subset)
+
             noise_pdf, noise_samples = \
                                 self._get_added_noise_samples(cov_estimates,
                                                                 len_data, 
@@ -224,14 +237,15 @@ class TestBayesFitnessFunction(FitnessFunction):
         return pdf, samples
 
     def _get_added_noise_samples(self, cov_estimates, len_data, num_samples):
-        noise_dists1 = [invgamma((0.01 + len_data) / 2,
-                        scale=(0.01 * var_ols + ssqe) / 2)
-                       for _, _, var_ols, ssqe in cov_estimates]
-        noise_dists = [truncnorm(0, np.inf, loc=0, scale=var_ols)\
+
+        #noise_dists1 = [invgamma((0.01 + len_data) / 2,
+        #                scale=(0.01 * var_ols + ssqe) / 2)
+        #               for _, _, var_ols, ssqe in cov_estimates]
+        noise_dists = [truncnorm(0, np.inf, loc=0, scale=np.sqrt(var_ols))\
                         for _, _, var_ols, ssqe in cov_estimates]
 
-        noise_pdf1, noise_samples1 = self._get_samples_and_pdf(noise_dists1,
-                                                             num_samples)
+        #noise_pdf1, noise_samples1 = self._get_samples_and_pdf(noise_dists1,
+        #                                                     num_samples)
 
         noise_pdf, noise_samples = self._get_samples_and_pdf(noise_dists,
                                                              num_samples)
@@ -258,7 +272,7 @@ class TestBayesFitnessFunction(FitnessFunction):
             cov = var_ols * np.linalg.inv(f_deriv.T.dot(f_deriv))
         except:
             cov = var_ols * np.linalg.pinv(f_deriv.T.dot(f_deriv))
-
+            
         return individual.constants, cov, var_ols, ssqe#, noise_std_dev
 
     def _get_dists(self, individual, subset=None):
@@ -293,7 +307,28 @@ class TestBayesFitnessFunction(FitnessFunction):
                                'distributions')
             return None, None
         return param_dists, cov_estimates
+    
 
+    def upate_priors_for_inv_gamma(self, individual, subsets, priors):
+        
+        n_params = individual.get_number_local_optimization_params()
+        self.do_local_opt(individual, None)
+
+        for subset in subsets:
+
+            x, y = self.subset_data.get_dataset(subset=subset)
+
+            num_params = individual.get_number_local_optimization_params()
+            f, f_deriv = individual.evaluate_equation_with_local_opt_gradient_at(x)
+
+            diff = f - y
+            mu = diff.mean()
+            var = diff.var()
+            alpha = np.square(mu) / var
+            beta = mu / var
+            priors[n_params+subset] = InvGamma(alpha=alpha, beta=beta)
+
+        return priors
 
     def _set_mean_proposal(self, individual, proposal):
         params = np.empty(0)
