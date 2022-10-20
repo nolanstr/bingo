@@ -1,7 +1,6 @@
-from smcpy import AdaptiveSampler
-from smcpy import ImproperUniform, \
-                  InvGamma
-from smcpy import MultiSourceNormal
+from smcpy import AdaptiveSampler,
+                  ImproperUniform,
+                  MultiSourceNormal
 
 noise_priors = {'ImproperUniform':ImproperUniform(0,None),
                 'InverseGamma':InvGamma()}
@@ -39,3 +38,4 @@ class ModelPriors:
             priors[n_params+subset] = InvGamma(alpha=alpha, beta=beta)
 
         return priors
+

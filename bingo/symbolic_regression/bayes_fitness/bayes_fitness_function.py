@@ -12,6 +12,7 @@ from copy import deepcopy
 from bingo.evaluation.fitness_function import FitnessFunction
 from bingo.symbolic_regression.explicit_regression import \
                         SubsetExplicitTrainingData
+from bingo.symbolic_regression.
 from smcpy.mcmc.vector_mcmc import VectorMCMC
 from smcpy.mcmc.vector_mcmc_kernel import VectorMCMCKernel
 from mpi4py import MPI
@@ -213,41 +214,4 @@ class BayesFitnessFunction(FitnessFunction):
     @training_data.setter
     def training_data(self, training_data):
         self._cont_local_opt.training_data = training_data
-
-    def get_cred_pred(self, ind, step_list, subset=None, bounds=0.05):
-
-        n_params = ind.get_number_local_optimization_params()
-        x, y = self.subset_data.get_dataset(subset=subset)
-
-        ind.set_local_optimization_params(step_list[-1].params.T)
-        cred_outputs = \
-               ind.evaluate_equation_at(x).T
-        if subset != None:
-            subset += n_params
-            noise_stds = step_list[-1].params[:, subset].reshape((-1,1))
-        else:
-            noise_stds = step_list[-1].params[:, n_params].reshape((-1,1))
-
-        means = np.zeros(cred_outputs.shape)
-        pred_outputs = cred_outputs + np.random.normal(means, abs(noise_stds))
-        weights = step_list[-1].weights
-
-        cred_sort = np.argsort(cred_outputs, axis=0)
-        cred_weights = np.cumsum(weights[cred_sort].squeeze(), axis=0)
-        cred_out_sort = np.sort(cred_outputs, axis=0)
-        cred_y = []
-
-        for i, weight_col in enumerate(cred_weights.T):
-            cred_y.append(np.interp([bounds, 1-bounds],
-                                    weight_col, cred_out_sort[:,i]))
-        pred_sort = np.argsort(pred_outputs, axis=0)
-        pred_weights = np.cumsum(weights[pred_sort].squeeze(), axis=0)
-        pred_out_sort = np.sort(pred_outputs, axis=0)
-        pred_y = []
-
-        for i, weight_col in enumerate(pred_weights.T):
-            pred_y.append(np.interp([bounds, 1-bounds], 
-                                    weight_col, pred_out_sort[:,i]))
-
-        return x, np.array(cred_y), np.array(pred_y)
 
