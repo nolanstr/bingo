@@ -12,11 +12,15 @@ class RandomSample:
         self.randomize_subsets()
 
     def randomize_subsets(self):
-        
+
         for i, subset_size in enumerate(self._multisource_num_pts):
             
+            if subset_size > self.full_idxs[i].shape[0]:
+                replace=True
+            else:
+                replace = False
             self.subset_idxs[i] = np.random.choice(self.full_idxs[i],
-                                                subset_size, replace=False)
+                                                subset_size, replace=replace)
         
         self._x = np.vstack([self.training_data.x[subset_idxs,:] for \
                                         subset_idxs in self.subset_idxs])
@@ -38,8 +42,7 @@ class RandomSample:
        
     def _set_subset_idxs(self):
         all_idxs = np.arange(sum(self._full_multisource_num_pts))
-        idx_markers = [0] + list(self._full_multisource_num_pts)
-
+        idx_markers = np.cumsum([0] + list(self._full_multisource_num_pts))
         self.full_idxs = [all_idxs[idx_markers[i]:idx_markers[i+1]] for i in \
                                                             range(len(idx_markers)-1)]
         self.subset_idxs = np.copy(self.full_idxs)

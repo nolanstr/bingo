@@ -67,9 +67,8 @@ class Statistics:
         f, f_deriv = individual.evaluate_equation_with_local_opt_gradient_at(x)
         
         ssqe = np.sum((f - y) ** 2)
-        var_ols = ssqe / max(1, len(f) - num_params)
-        #var_ols = ssqe / len(f)
-        print(f'var_ols = {var_ols}')
+        #var_ols = ssqe / max(1, len(f) - num_params)
+        var_ols = ssqe / len(f)
         try:
             cov = var_ols * np.linalg.inv(f_deriv.T.dot(f_deriv))
         except:
