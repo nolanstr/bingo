@@ -55,7 +55,7 @@ class Statistics:
 
         noise_pdf, noise_samples = self._get_samples_and_pdf(noise_dists,
                                                              num_samples)
-        return noise_pdf, noise_samples
+        return noise_pdf, np.sqrt(noise_samples)
 
     def estimate_covariance(self, individual, subset=None):
         
