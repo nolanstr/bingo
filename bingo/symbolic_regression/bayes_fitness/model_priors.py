@@ -1,41 +1,25 @@
-from smcpy import AdaptiveSampler,
-                  ImproperUniform,
+from smcpy import AdaptiveSampler, \
+                  ImproperUniform, \
                   MultiSourceNormal
 
-noise_priors = {'ImproperUniform':ImproperUniform(0,None),
-                'InverseGamma':InvGamma()}
+noise_priors = {'ImproperUniform':ImproperUniform(0,None)}
 
-class ModelPriors:
+class Priors:
 
-    def __init__(self, noise_prior='ImproperUniform'):
+    def __init__(self, noise_prior):
         self._noise_prior = noise_prior
 
-    def __call__(self, ind, noise_terms):
+    def _create_priors(self, ind, noise_terms):
 
         n_params = ind.get_number_local_optimization_params()
+        param_names = self.get_parameter_names(ind) + \
+                    [f'std_dev{i}' for i in range(len(self._multisource_num_pts))]
         priors = [ImproperUniform() for _ in range(n_params)] + \
-                [noise_priors[self._noise_prior] for _ in range(noise_terms)]
+                    [noise_priors[self._noise_prior] for _ in range(len(noise_terms))]
         
-        return priors
+        return param_names, priors
 
-    def upate_priors_for_inv_gamma(self, individual, subsets, priors):
-        
-        n_params = individual.get_number_local_optimization_params()
-        self.do_local_opt(individual, None)
-
-        for subset in subsets:
-
-            x, y = self.subset_data.get_dataset(subset=subset)
-
-            num_params = individual.get_number_local_optimization_params()
-            f, f_deriv = individual.evaluate_equation_with_local_opt_gradient_at(x)
-
-            diff = f - y
-            mu = diff.mean()
-            var = diff.var()
-            alpha = np.square(mu) / var
-            beta = mu / var
-            priors[n_params+subset] = InvGamma(alpha=alpha, beta=beta)
-
-        return priors
-
+    @staticmethod
+    def get_parameter_names(individual):
+        num_params = individual.get_number_local_optimization_params()
+        return [f'p{i}' for i in range(num_params)]

@@ -1,18 +1,22 @@
 import numpy as np
 import math
 
-from scipy.stats import multivariate_normal as mvn
-from scipy.stats import invgamma
-from scipy.stats import uniform
-from scipy.stats import norm
-from scipy.stats import truncnorm
-
 from copy import deepcopy
 
 from bingo.evaluation.fitness_function import FitnessFunction
 from bingo.symbolic_regression.explicit_regression import \
                         SubsetExplicitTrainingData
-from bingo.symbolic_regression.
+from bingo.symbolic_regression.bayes_fitness.model_util import \
+                        Utilities
+from bingo.symbolic_regression.bayes_fitness.model_priors import \
+                        Priors
+from bingo.symbolic_regression.bayes_fitness.model_statistics import \
+                        Statistics
+from bingo.symbolic_regression.bayes_fitness.random_sample import \
+                        RandomSample
+
+from smcpy import AdaptiveSampler
+from smcpy import MultiSourceNormal
 from smcpy.mcmc.vector_mcmc import VectorMCMC
 from smcpy.mcmc.vector_mcmc_kernel import VectorMCMCKernel
 from mpi4py import MPI
@@ -26,7 +30,8 @@ BASE_MULTISOURCE_INFO = None
 RANDOM_SAMPLE_INFO = None
 
 
-class BayesFitnessFunction(FitnessFunction):
+class BayesFitnessFunction(FitnessFunction, Utilities, Priors, RandomSample,
+        Statistics):
     """
     Currently we are only using a uniformly weighted proposal --> This can
     change in the future.
@@ -36,30 +41,23 @@ class BayesFitnessFunction(FitnessFunction):
                  random_sample_info=None,
                  num_multistarts=4,
                  noise_prior='ImproperUniform'):
-        
+
         self._cont_local_opt = continuous_local_opt
+        Priors.__init__(self, noise_prior=noise_prior)
+        Utilities.__init__(self)
+        Statistics.__init__(self)
+        RandomSample.__init__(self, continuous_local_opt.training_data, 
+                                        multisource_info, random_sample_info)
         self._set_smc_hyperparams(smc_hyperparams)
-        self._set_multisource_info(multisource_info)
-        self._set_random_sample_info(random_sample_info)
 
         self._num_multistarts = num_multistarts
-        self._norm_phi = 1 / np.sqrt(continuous_local_opt.training_data.x.shape[0])
+        self._norm_phi = 1 / np.sqrt(self._cont_local_opt.training_data.x.shape[0])
         self._eval_count = 0
-        self._noise_prior = noise_prior
-
-        self.subset_data = SubsetExplicitTrainingData(deepcopy(
-                                                self.training_data),
-                                                self._full_multisource_num_pts,
-                                                self._multisource_num_pts)
 
     def __call__(self, individual, return_nmll_only=True):
         
-        n_params = individual.get_number_local_optimization_params()
-        param_names = self.get_parameter_names(individual) + \
-                        [f'std_dev{i}' for i in range(len(self._multisource_num_pts))]
-        priors = [ImproperUniform() for _ in range(n_params)] + \
-                        [noise_priors[self._noise_prior]] * len(self._multisource_num_pts)
-            
+        param_names, priors = self._create_priors(individual, self._full_multisource_num_pts)
+
         try:
             proposal = self.generate_proposal_samples(individual,
                                                   self._num_particles,
@@ -80,7 +78,7 @@ class BayesFitnessFunction(FitnessFunction):
                             tuple([None]*len(self._multisource_num_pts))]
         log_like_func = MultiSourceNormal
         vector_mcmc = VectorMCMC(lambda x: self.evaluate_model(x, individual),
-                                 self.subset_data._y_subset_data.flatten(),
+                                 self.y_subset.flatten(),
                                  priors,
                                  log_like_args,
                                  log_like_func)
@@ -119,73 +117,11 @@ class BayesFitnessFunction(FitnessFunction):
         self._num_particles = smc_hyperparams['num_particles']
         self._mcmc_steps = smc_hyperparams['mcmc_steps']
         self._ess_threshold = smc_hyperparams['ess_threshold']
-
-    def _set_multisource_info(self, multisource_info):
-        
-        if multisource_info is None:
-            multisource_info = \
-                    tuple([self._cont_local_opt.training_data.x.shape[0]])
-        
-        self._multisource_num_pts = tuple(multisource_info)
-        self._full_multisource_num_pts = tuple(multisource_info)
-
-    def _update_multisource(self, random_sample_info):
-        
-        if not isinstance(random_sample_info, np.ndarray):
-            random_sample_info = np.array(random_sample_info)
-
-        assert(len(random_sample_info)==len(self._multisource_num_pts)), \
-                'length of random sample subsets must match multisource num pts'
-
-        if np.all(random_sample_info>=1):
-            random_sample_info = np.minimum(random_sample_info, 
-                                            np.array(self._full_multisource_num_pts))
-            self._multisource_num_pts = tuple(random_sample_info.astype(int).tolist())
-        
-        elif np.all(random_sample_info<=1):
-            self._multisource_num_pts = tuple([math.ceil(subset_size * subset_percent) \
-                                      for subset_size, subset_percent in \
-                                      zip(self._multisource_num_pts, random_sample_info)])
-        else:
-            raise ValueError(\
-                    'random sample info needs to be all greater than 1 or all less than 1')
-
-        assert(sum(self._multisource_num_pts) < \
-               sum(self._full_multisource_num_pts), 
-               'random sample subset smaller than full subsets')
-
-    def _set_random_sample_info(self, random_sample_info):
-        
-        if np.any([isinstance(random_sample_info, float),
-                  isinstance(random_sample_info, int)]):
-            self._random_sample_subsets = random_sample_info
-            self._update_multisource(
-                    len(self._multisource_num_pts) * [random_sample_info])
-
-        elif np.any([isinstance(random_sample_info, list), 
-                     isinstance(random_sample_info, tuple),
-                     isinstance(random_sample_info, np.ndarray)]):
-            self._random_sample_subsets = random_sample_info
-            self._update_multisource(random_sample_info, uneven_sampling=True)
-
-        else:
-            self._random_sample_subsets = 1.0
-
-    @staticmethod
-    def get_parameter_names(individual):
-        num_params = individual.get_number_local_optimization_params()
-        return [f'p{i}' for i in range(num_params)]
     
     def do_local_opt(self, individual, subset):
         individual._needs_opt = True
-        #I only have the model being re-optimized on the whole dataset
         if subset is None:
             _ = self._cont_local_opt(individual)
-            #print('COMMENTED OUT RE OPT OF MODEL FOR SR1 TEST')
-
-    def randomize_subsets(self):
-        self.subset_data.random_sample(self._full_multisource_num_pts, 
-                                                self._multisource_num_pts)
 
     def _set_mean_proposal(self, individual, proposal):
         params = np.empty(0)
@@ -196,8 +132,7 @@ class BayesFitnessFunction(FitnessFunction):
     def evaluate_model(self, params, individual):
         self._eval_count += 1
         individual.set_local_optimization_params(params.T)
-        return individual.evaluate_equation_at(
-                                    self.subset_data._x_subset_data).T
+        return individual.evaluate_equation_at(self.x_subset).T
 
     @property
     def eval_count(self):

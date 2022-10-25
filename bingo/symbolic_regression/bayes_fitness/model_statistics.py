@@ -1,38 +1,32 @@
+import numpy as np
 
-
-class ModelStatistics:
+from scipy.stats import invgamma, \
+                        truncnorm, \
+                        multivariate_normal as mvn
+class Statistics:
 
     def __init__(self):
         pass
 
     def generate_proposal_samples(self, individual, num_samples, param_names):
 
-        pdf = np.ones((num_samples, 1))
         samples = np.ones((num_samples, len(param_names)))
-        cov_estimates = []
-        
         n_params = individual.get_number_local_optimization_params()
-
         if n_params > 0:
 
             param_dists, cov_estimates = self._get_dists(individual)
-
-            pdf, samples[:,:n_params] = self._get_samples_and_pdf(param_dists,
+            _, samples[:,:n_params] = self._get_samples_and_pdf(param_dists,
                                                                     num_samples)
 
         for subset, len_data in enumerate(self._multisource_num_pts):
-            param_dist, cov_estimates = self._get_dists(individual, 
-                                                            subset)
-
-            noise_pdf, noise_samples = \
-                                self._get_added_noise_samples(cov_estimates,
-                                                                len_data, 
-                                                                num_samples)
+            
+            param_dist, cov_estimates = self._get_dists(individual, subset)
+            noise_pdf, noise_samples = self._get_added_noise_samples(cov_estimates,
+                                                                     len_data, 
+                                                                     num_samples)
             samples[:, n_params+subset] = noise_samples.flatten()
-            pdf *= noise_pdf
 
-        pdf = np.ones_like(pdf)
-
+        pdf = np.ones((num_samples, 1))
         samples = dict(zip(param_names, samples.T))
 
         return samples, pdf
@@ -55,14 +49,9 @@ class ModelStatistics:
 
     def _get_added_noise_samples(self, cov_estimates, len_data, num_samples):
 
-        #noise_dists1 = [invgamma((0.01 + len_data) / 2,
-        #                scale=(0.01 * var_ols + ssqe) / 2)
-        #               for _, _, var_ols, ssqe in cov_estimates]
-        noise_dists = [truncnorm(0, np.inf, loc=0, scale=np.sqrt(var_ols))\
-                        for _, _, var_ols, ssqe in cov_estimates]
-
-        #noise_pdf1, noise_samples1 = self._get_samples_and_pdf(noise_dists1,
-        #                                                     num_samples)
+        noise_dists = [invgamma((0.01 + len_data) / 2,
+                        scale=(0.01 * var_ols + ssqe) / 2)
+                       for _, _, var_ols, ssqe in cov_estimates]
 
         noise_pdf, noise_samples = self._get_samples_and_pdf(noise_dists,
                                                              num_samples)
@@ -70,17 +59,17 @@ class ModelStatistics:
 
     def estimate_covariance(self, individual, subset=None):
         
-        x, y = self.subset_data.get_dataset(subset=subset)
-
         self.do_local_opt(individual, subset)
+
+        x, y = self.get_dataset(subset=subset)
 
         num_params = individual.get_number_local_optimization_params()
         f, f_deriv = individual.evaluate_equation_with_local_opt_gradient_at(x)
         
         ssqe = np.sum((f - y) ** 2)
-        #included a max here to avoid division by zero + negative multiplication
-        # of the cov
         var_ols = ssqe / max(1, len(f) - num_params)
+        #var_ols = ssqe / len(f)
+        print(f'var_ols = {var_ols}')
         try:
             cov = var_ols * np.linalg.inv(f_deriv.T.dot(f_deriv))
         except:
@@ -118,5 +107,7 @@ class ModelStatistics:
         if not param_dists:
             raise RuntimeError('Could not generate any valid proposal '
                                'distributions')
-
+            return None, None
+        
+        return param_dists, cov_estimates
 

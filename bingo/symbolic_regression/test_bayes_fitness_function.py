@@ -267,7 +267,8 @@ class BayesFitnessFunction(FitnessFunction):
         ssqe = np.sum((f - y) ** 2)
         #included a max here to avoid division by zero + negative multiplication
         # of the cov
-        var_ols = ssqe / max(1, len(f) - num_params)
+        #var_ols = ssqe / max(1, len(f) - num_params)
+        var_ols = ssqe / len(f)
         try:
             cov = var_ols * np.linalg.inv(f_deriv.T.dot(f_deriv))
         except:

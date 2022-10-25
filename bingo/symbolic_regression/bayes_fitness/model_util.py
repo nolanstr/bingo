@@ -1,18 +1,21 @@
 import numpy as np
 
-class utilities:
+class Utilities:
 
     def __init__(self):
         pass
     
-    def estimate_cred_pred(self, ind, step_list, subset=None, bounds=0.05):
+    def estimate_cred_pred(self, ind, step_list, subset=None, bounds=0.05,
+                                                                sort_x=True):
 
         n_params = ind.get_number_local_optimization_params()
-        x, y = self.subset_data.get_dataset(subset=subset)
+        x, y = self.get_dataset(subset=subset)
+        x_sort = np.argsort(x[:,0])
+        x = x[x_sort, :]
+        y = y[x_sort, :]
 
         ind.set_local_optimization_params(step_list[-1].params.T)
-        model_outputs = \
-               ind.evaluate_equation_at(x).T
+        model_outputs = ind.evaluate_equation_at(x).T
         weights = step_list[-1].weights
 
         if subset != None:
@@ -21,34 +24,29 @@ class utilities:
         else:
             noise_stds = step_list[-1].params[:, n_params].reshape((-1,1))
         
-        cred = self._estimate_interval(model_outputs, weights)
-        pred = self._estimate_interval(model_outputs, weights, noise=noise_stds)
+        cred = self._estimate_interval(model_outputs, weights, bounds=bounds)
+        pred = self._estimate_interval(model_outputs, weights, noise=noise_stds,
+                                                                    bounds=bounds)
 
         return x, cred, pred
          
-    def _estimate_interval(self, model_output, weights, noise=None):
+    def _estimate_interval(self, model_outputs, weights, noise=None, bounds=0.05):
         """
         if noise is None --> credible interval
         else --> predicted interval
         """
-        if noise == None:
-            noise = np.zeros(model_outputs.shape[0])
-
-        if subset != None:
-            subset += n_params
-            noise_stds = step_list[-1].params[:, subset].reshape((-1,1))
-        else:
-            noise_stds = step_list[-1].params[:, n_params].reshape((-1,1))
+        if noise is None:
+            noise = np.zeros(model_outputs.shape[0]).reshape((-1,1))
 
         means = np.zeros(model_outputs.shape)
-        model_outputs = model_outputs + np.random.normal(means, abs(noise_stds))
+        model_outputs = model_outputs + np.random.normal(means, abs(noise))
 
         model_outputs_sort = np.argsort(model_outputs, axis=0)
-        model_outputs_weights = np.cumsum(weights[model_sort].squeeze(), axis=0)
+        model_outputs_weights = np.cumsum(weights[model_outputs_sort].squeeze(), axis=0)
         model_out_sort = np.sort(model_outputs, axis=0)
-        model_y = np.array((2, model_output.shape[1]))
+        model_y = np.empty((model_outputs.shape[1], 2))
 
-        for i, weight_col in enumerate(model_output_weights.T):
+        for i, weight_col in enumerate(model_outputs_weights.T):
             model_y[i] = np.interp([bounds, 1-bounds], weight_col,
                                                 model_out_sort[:,i])
 

@@ -200,6 +200,7 @@ class ContinuousLocalOptimization(FitnessFunction):
         return self._fitness_function(individual)
 
     def _run_algorithm_for_optimization(self, sub_routine, individual, params):
+        tol = 1e-14
         if self._algorithm in ROOT_SET:
             if isinstance(self._fitness_function, VectorGradientMixin) \
                     and self._algorithm in JACOBIAN_SET:
@@ -209,12 +210,13 @@ class ContinuousLocalOptimization(FitnessFunction):
                         args=(individual, ),
                         jac=lambda x, indv: self._fitness_function.get_fitness_vector_and_jacobian(indv)[1],  # pylint: disable=line-too-long
                         method=self._algorithm,
-                        tol=1e-6)
+                        tol=tol)
+                
             else:
                 optimize_result = optimize.root(sub_routine, params,
                                                 args=(individual),
                                                 method=self._algorithm,
-                                                tol=1e-6)
+                                                tol=tol)
         else:
             if isinstance(self._fitness_function, GradientMixin) \
                     and self._algorithm in JACOBIAN_SET:
@@ -223,12 +225,12 @@ class ContinuousLocalOptimization(FitnessFunction):
                         args=(individual, ),
                         jac=lambda x, indv: self._fitness_function.get_fitness_and_gradient(indv)[1],  # pylint: disable=line-too-long
                         method=self._algorithm,
-                        tol=1e-6)
+                        tol=tol)
             else:
                 optimize_result = optimize.minimize(sub_routine, params,
                                                     args=(individual, ),
                                                     method=self._algorithm,
-                                                    tol=1e-6)
+                                                    tol=tol)
         return optimize_result.x
 
     def _evaluate_fitness(self, individual):
