@@ -1,4 +1,5 @@
 import numpy as np
+from copy import deepcopy
 
 class Utilities:
 
@@ -6,29 +7,40 @@ class Utilities:
         pass
     
     def estimate_cred_pred(self, ind, step_list, subset=None, bounds=0.05,
-                                                                sort_x=True):
+                                                            sort_x=True,
+                                                            linspace=True, 
+                                                            step_list_term=-1):
 
+        ind = deepcopy(ind)
         n_params = ind.get_number_local_optimization_params()
         x, y = self.get_dataset(subset=subset)
         x_sort = np.argsort(x[:,0])
         x = x[x_sort, :]
         y = y[x_sort, :]
+        raw_data = [x, y]
+        
+        if linspace:
+            empty_data = np.empty((linspace, x.shape[1]))
+            empty_data[:, 0] = np.linspace(x[:,0].min(), x[:,0].max(), linspace)
+            empty_data[:, 1] = x[0,1]
+            empty_data[:, 2] = x[0,2]
+            x = empty_data
 
-        ind.set_local_optimization_params(step_list[-1].params.T)
+        ind.set_local_optimization_params(step_list[step_list_term].params.T)
         model_outputs = ind.evaluate_equation_at(x).T
-        weights = step_list[-1].weights
+        weights = step_list[step_list_term].weights
 
         if subset != None:
             subset += n_params
-            noise_stds = step_list[-1].params[:, subset].reshape((-1,1))
+            noise_stds = step_list[step_list_term].params[:, subset].reshape((-1,1))
         else:
-            noise_stds = step_list[-1].params[:, n_params].reshape((-1,1))
+            noise_stds = step_list[step_list_term].params[:, n_params].reshape((-1,1))
         
         cred = self._estimate_interval(model_outputs, weights, bounds=bounds)
         pred = self._estimate_interval(model_outputs, weights, noise=noise_stds,
                                                                     bounds=bounds)
 
-        return x, cred, pred
+        return x, raw_data, cred, pred
          
     def _estimate_interval(self, model_outputs, weights, noise=None, bounds=0.05):
         """

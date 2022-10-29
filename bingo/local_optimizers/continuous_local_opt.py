@@ -179,7 +179,8 @@ class ContinuousLocalOptimization(FitnessFunction):
     def _optimize_params(self, individual):
         num_params = individual.get_number_local_optimization_params()
         #changed c_0 to be more accurate to model params for beam bending
-        c_0 = np.random.uniform(-1, 1, num_params)
+        #c_0 = np.random.uniform(-1, 1, num_params)
+        c_0 = np.random.normal(size=num_params)
         try:
             params = self._run_algorithm_for_optimization(
                 self._sub_routine_for_fit_function, individual, c_0)
@@ -200,7 +201,7 @@ class ContinuousLocalOptimization(FitnessFunction):
         return self._fitness_function(individual)
 
     def _run_algorithm_for_optimization(self, sub_routine, individual, params):
-        tol = 1e-14
+        tol = 1e-12
         if self._algorithm in ROOT_SET:
             if isinstance(self._fitness_function, VectorGradientMixin) \
                     and self._algorithm in JACOBIAN_SET:

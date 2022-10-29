@@ -19,8 +19,8 @@ class RandomSample:
                 replace=True
             else:
                 replace = False
-            self.subset_idxs[i] = np.random.choice(self.full_idxs[i],
-                                                subset_size, replace=replace)
+            self.subset_idxs[i] = np.sort(np.random.choice(self.full_idxs[i],
+                                                subset_size, replace=replace))
         
         self._x = np.vstack([self.training_data.x[subset_idxs,:] for \
                                         subset_idxs in self.subset_idxs])

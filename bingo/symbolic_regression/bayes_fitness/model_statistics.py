@@ -50,8 +50,10 @@ class Statistics:
     def _get_added_noise_samples(self, cov_estimates, len_data, num_samples):
         ns = 0.01
         noise_dists = [invgamma((ns + len_data) / 2,
-                        scale=(ns * var_ols + ssqe) / 2)
+                        scale= (ns * var_ols + ssqe) / 2)
                        for _, _, var_ols, ssqe in cov_estimates]
+        #noise_dists = [truncnorm(a=0, b=np.inf, scale=np.sqrt(var_ols)) \
+        #               for _, _, var_ols, ssqe in cov_estimates]
 
         noise_pdf, noise_samples = self._get_samples_and_pdf(noise_dists,
                                                              num_samples)
