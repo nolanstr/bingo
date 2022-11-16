@@ -56,7 +56,9 @@ class BayesFitnessFunction(FitnessFunction, Utilities, Priors, RandomSample,
 
     def __call__(self, individual, return_nmll_only=True):
         
-        param_names, priors = self._create_priors(individual, self._full_multisource_num_pts)
+        param_names, priors = self._create_priors(individual,
+                                                  self._full_multisource_num_pts,
+                                                  self._num_particles)
 
         try:
             proposal = self.generate_proposal_samples(individual,
