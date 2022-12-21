@@ -177,7 +177,8 @@ class EvolutionaryOptimizer(metaclass=ABCMeta):
             stats_string += ", %le" % test_fitness
         if self.hall_of_fame is not None:
             for i in self.hall_of_fame:
-                stats_string += ", %le" % i.fitness
+                #stats_string += ", %le" % i.fitness FIX FOR NON NUMERIC FITNESS
+                stats_string += f", {i.fitness}"
         STATS_LOGGER.log(INFO, stats_string)
 
     def _update_best_fitness(self):
@@ -291,12 +292,10 @@ class EvolutionaryOptimizer(metaclass=ABCMeta):
         suppress_logging : bool (optional)
             Used to manually suppress the logging output of this function
         """
-        print('a')
         start_time = datetime.now()
         self._do_evolution(num_generations)
         elapsed_time = datetime.now() - start_time
         self._times.append(elapsed_time)
-        print('b')
         if hall_of_fame_update:
             self.update_hall_of_fame()
         if not suppress_logging:
