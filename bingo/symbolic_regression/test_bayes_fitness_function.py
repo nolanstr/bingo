@@ -31,7 +31,7 @@ RANDOM_SAMPLE_INFO = None
 noise_priors = {'ImproperUniform':ImproperUniform(0,None),
                 'InverseGamma':InvGamma()}
 
-class BayesFitnessFunction(FitnessFunction):
+class TestBayesFitnessFunction(FitnessFunction):
     """
     Currently we are only using a uniformly weighted proposal --> This can
     change in the future.
