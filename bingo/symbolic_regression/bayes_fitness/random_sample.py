@@ -1,4 +1,5 @@
 import numpy as np
+import math
 
 class RandomSample:
 
@@ -45,7 +46,8 @@ class RandomSample:
         idx_markers = np.cumsum([0] + list(self._full_multisource_num_pts))
         self.full_idxs = [all_idxs[idx_markers[i]:idx_markers[i+1]] for i in \
                                                             range(len(idx_markers)-1)]
-        self.subset_idxs = np.copy(self.full_idxs)
+        self.subset_idxs = [np.empty(num_pts).astype(np.int) for num_pts \
+                                    in self._multisource_num_pts]
 
     def get_dataset(self, subset=None):
         
@@ -69,7 +71,6 @@ class RandomSample:
         
         if not isinstance(random_sample_info, np.ndarray):
             random_sample_info = np.array(random_sample_info)
-
         assert(len(random_sample_info)==len(self._multisource_num_pts)), \
                 'length of random sample subsets must match multisource num pts'
 
@@ -91,7 +92,6 @@ class RandomSample:
                'random sample subset smaller than full subsets')
 
     def _set_random_sample_info(self, random_sample_info):
-        
         if np.any([isinstance(random_sample_info, float),
                   isinstance(random_sample_info, int)]):
             self._random_sample_subsets = random_sample_info
