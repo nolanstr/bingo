@@ -281,6 +281,7 @@ class BayesFitnessFunction(FitnessFunction):
     def evaluate_model(self, params, individual):
         self._eval_count += 1
         individual.set_local_optimization_params(params.T)
+        import pdb;pdb.set_trace()
         return individual.evaluate_equation_at(
                                     self.subset_data._x_subset_data).T
 

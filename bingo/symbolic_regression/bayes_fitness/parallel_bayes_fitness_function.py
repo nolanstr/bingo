@@ -64,8 +64,14 @@ class BayesFitnessFunction(FitnessFunction, Utilities, Priors, RandomSample,
 
         try:
             proposal = self.generate_proposal_samples(individual,
-                                                  self._num_particles,
+                                                  self._num_particles*self.parallel,
                                                   param_names)
+            params = np.empty((self.parallel, self._num_particles,
+                                                    len(param_names)))
+            for i, key in enumerate(proposal[0].keys()):
+                params[:,:,i] = proposal[0][key].reshape((self.parallel,
+                                                         self._num_particles))
+            proposal = (params, proposal[1])
             if self._noise_prior == 'InverseGamma':
                 priors = self.upate_priors_for_inv_gamma(individual,
                                                          range(len(self._multisource_num_pts)),
@@ -75,8 +81,8 @@ class BayesFitnessFunction(FitnessFunction, Utilities, Priors, RandomSample,
                                                                          as e:
             print('error with proposal creation')
             if return_nmll_only:
-                return np.nan
-            return np.nan, None, None
+                return np.empty(self.parallel) * np.nan
+            return np.empty(self.parallel)*np.nan, None, None
         log_like_args = [self._multisource_num_pts, 
                             tuple([None]*len(self._multisource_num_pts))]
         log_like_func = MultiSourceNormal
@@ -91,24 +97,27 @@ class BayesFitnessFunction(FitnessFunction, Utilities, Priors, RandomSample,
         try:
             step_list, marginal_log_likes = \
                 smc.sample(self._num_particles, self._mcmc_steps,
+                           param_names,
                            self._ess_threshold,
                            proposal=proposal,
                            parallel=self.parallel,
                            required_phi=self._norm_phi)
 
         except (ValueError, np.linalg.LinAlgError, ZeroDivisionError) as e:
+            import pdb;pdb.set_trace()
             if return_nmll_only:
                 self._set_mean_proposal(individual, proposal)
-                return np.nan
-            return np.nan, None, None
-        
+                return np.empty(self.parallel) * np.nan
+            return np.empty(self.parallel) * np.nan, None, None
+
         max_idx = np.unravel_index(step_list[-1].log_likes.argmax(),
-                step_list[-1].log_likes.T.shape)
+                step_list[-1].log_likes.shape)
         maps = step_list[-1].params[max_idx]
         individual.set_local_optimization_params(maps[:-len(self._multisource_num_pts)])
 
         nmll = -1 * (marginal_log_likes[:, -1] -
                      marginal_log_likes[np.arange(self.parallel), smc.req_phi_index])
+
         if return_nmll_only:
             return nmll
         return nmll, step_list, vector_mcmc
@@ -129,10 +138,10 @@ class BayesFitnessFunction(FitnessFunction, Utilities, Priors, RandomSample,
             _ = self._cont_local_opt(individual)
 
     def _set_mean_proposal(self, individual, proposal):
-        params = np.empty(0)
-        for key in proposal[0].keys():
-            params = np.append(params, proposal[0][key].mean())
-        individual.set_local_optimization_params(params[:-1])
+        n_params = individual.get_number_local_optimization_params()
+        params = proposal[0]
+        individual.set_local_optimization_params(
+                                    params.reshape((-1, n_params)).mean(axis=0))
 
     def evaluate_model(self, params, individual):
         self._eval_count += 1
