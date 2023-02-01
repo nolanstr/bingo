@@ -30,7 +30,7 @@ BASE_MULTISOURCE_INFO = None
 RANDOM_SAMPLE_INFO = None
 
 
-class EnsembleBayesFitnessFunction(FitnessFunction, Utilities, Priors, RandomSample,
+class BayesFitnessFunction(FitnessFunction, Utilities, Priors, RandomSample,
         Statistics):
     """
     Currently we are only using a uniformly weighted proposal --> This can
@@ -41,7 +41,7 @@ class EnsembleBayesFitnessFunction(FitnessFunction, Utilities, Priors, RandomSam
                  random_sample_info=None,
                  num_multistarts=4,
                  noise_prior='ImproperUniform',
-                 ensemble=2):
+                 ensemble=10):
 
         self._cont_local_opt = continuous_local_opt
         Priors.__init__(self, noise_prior=noise_prior)
@@ -50,11 +50,11 @@ class EnsembleBayesFitnessFunction(FitnessFunction, Utilities, Priors, RandomSam
         RandomSample.__init__(self, continuous_local_opt.training_data, 
                                         multisource_info, random_sample_info)
         self._set_smc_hyperparams(smc_hyperparams)
-        self._ensemble = ensemble
 
         self._num_multistarts = num_multistarts
         self._norm_phi = 1 / np.sqrt(self._cont_local_opt.training_data.x.shape[0])
         self._eval_count = 0
+        self._ensemble = ensemble
 
     def __call__(self, individual, return_nmll_only=True):
         
@@ -89,36 +89,51 @@ class EnsembleBayesFitnessFunction(FitnessFunction, Utilities, Priors, RandomSam
 
         mcmc_kernel = VectorMCMCKernel(vector_mcmc, param_order=param_names)
         smc = AdaptiveSampler(mcmc_kernel)
-        try:
-
+        if self._model_check(individual):
+            return np.nan
+        else:
             nmlls = np.empty(self._ensemble)
             
-            for ensemble_estimate in range(self._ensemble):
+            for i in range(self._ensemble):
+                nmll = self._estimate_nmll(individual, smc, proposal)
+                nmlls[i] = nmll
 
-                step_list, marginal_log_likes = \
-                    smc.sample(self._num_particles, self._mcmc_steps,
-                               self._ess_threshold,
-                               proposal=proposal,
-                               required_phi=self._norm_phi)
-                max_idx = np.argmax(step_list[-1].log_likes)
-                maps = step_list[-1].params[max_idx]
-                individual.set_local_optimization_params(maps[:-len(self._multisource_num_pts)])
+            return np.nanmean(nmlls)
+    
+    def _estimate_nmll(self, individual, smc, proposal):
 
-                nmll = -1 * (marginal_log_likes[-1] -
-                             marginal_log_likes[smc.req_phi_index[0]])
-                nmlls[ensemble_estimate] = nmll
-            
-            nmll = nmlls.mean()
+        try:
+            step_list, marginal_log_likes = \
+                smc.sample(self._num_particles, self._mcmc_steps,
+                           self._ess_threshold,
+                           proposal=proposal,
+                           required_phi=self._norm_phi)
 
         except (ValueError, np.linalg.LinAlgError, ZeroDivisionError) as e:
-            if return_nmll_only:
-                self._set_mean_proposal(individual, proposal)
-                return np.nan
-            return np.nan, None, None
+            self._set_mean_proposal(individual, proposal)
+            return np.nan
 
-        if return_nmll_only:
-            return nmll
-        return nmll, step_list, vector_mcmc
+        max_idx = np.argmax(step_list[-1].log_likes)
+        maps = step_list[-1].params[max_idx]
+        individual.set_local_optimization_params(maps[:-len(self._multisource_num_pts)])
+
+        nmll = -1 * (marginal_log_likes[-1] -
+                     marginal_log_likes[smc.req_phi_index[0]])
+        return nmll 
+
+    def _model_check(self, ind):
+        """
+        If this returns True then the individual does not always have valid
+        output.
+        """
+        self.do_local_opt(ind, None)
+        f = ind.evaluate_equation_at(self._cont_local_opt.training_data.x)
+        
+        if np.all(np.isinf(f)) or np.any(np.isnan(f)):
+            print('fail')
+            return True
+        else:
+            return False
 
     def _set_smc_hyperparams(self, smc_hyperparams):
         
