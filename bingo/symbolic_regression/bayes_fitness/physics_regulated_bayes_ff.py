@@ -86,6 +86,11 @@ class BayesFitnessFunction(FitnessFunction, Utilities, Priors, RandomSample,
                 return np.nan
             return np.nan, None, None
 
+        if not self.check_physics(individual):
+            if return_nmll_only:
+                return np.nan
+            return np.nan, None, None
+
         log_like_args = [self._multisource_num_pts, self._noise] 
         log_like_func = MultiSourceNormal
         vector_mcmc = VectorMCMC(lambda x: self.evaluate_model(x, individual),
@@ -106,6 +111,25 @@ class BayesFitnessFunction(FitnessFunction, Utilities, Priors, RandomSample,
                 nmlls[i] = nmll
 
             return np.nanmean(nmlls)
+
+    def check_physics(self, ind):
+        checks = []
+        for idxs in self.full_idxs:
+            sorted_idxs = idxs[np.argsort(self.training_data.x[idxs,0])]
+            f, f_deriv = ind.evaluate_equation_with_x_gradient_at(
+                                    self.training_data.x[sorted_idxs,:])
+
+            f_deriv2 = np.diff(f_deriv[:,0])
+
+            if np.all(f_deriv[:,0]>=0) and np.all(f_deriv2<=0):
+                checks.append(True)
+            else:
+                checks.append(False)
+        
+        if np.all(checks):
+            return True
+        else:
+            False
     
     def _estimate_nmll(self, individual, smc, proposal):
 

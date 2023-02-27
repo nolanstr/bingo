@@ -202,6 +202,8 @@ class ContinuousLocalOptimization(FitnessFunction):
 
     def _run_algorithm_for_optimization(self, sub_routine, individual, params):
         tol = 1e-12
+        if params.shape[0]==0:
+            return params
         if self._algorithm in ROOT_SET:
             if isinstance(self._fitness_function, VectorGradientMixin) \
                     and self._algorithm in JACOBIAN_SET:
@@ -221,17 +223,27 @@ class ContinuousLocalOptimization(FitnessFunction):
         else:
             if isinstance(self._fitness_function, GradientMixin) \
                     and self._algorithm in JACOBIAN_SET:
+                """
+                WHEN USING SLSQP I AM ENSURING THE CLO FIT GIVES A STRICTLY
+                POSITIVE MODEL EVALUATION.
+                """
+                cons = {'type':'ineq', 'fun': lambda x: sub_routine(x, individual).min()}
+                bnds = [(-np.inf,np.inf) for _ in range(len(params))]
                 optimize_result = optimize.minimize(
                         sub_routine, params,
                         args=(individual, ),
                         jac=lambda x, indv: self._fitness_function.get_fitness_and_gradient(indv)[1],  # pylint: disable=line-too-long
                         method=self._algorithm,
-                        tol=tol)
+                        tol=tol,
+                        constraints=cons,
+                        bounds=bnds)
             else:
+                cons = {'type':'ineq', 'fun': lambda x: sub_routine(x, individual).min()}
                 optimize_result = optimize.minimize(sub_routine, params,
                                                     args=(individual, ),
                                                     method=self._algorithm,
-                                                    tol=tol)
+                                                    tol=tol, 
+                                                    constraints=cons)
         return optimize_result.x
 
     def _evaluate_fitness(self, individual):

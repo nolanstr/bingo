@@ -81,8 +81,8 @@ class BayesFitnessFunction(FitnessFunction, Utilities, Priors, RandomSample,
                                                                          as e:
             print('error with proposal creation')
             if return_nmll_only:
-                return np.empty(self.parallel) * np.nan
-            return np.empty(self.parallel)*np.nan, None, None
+                return np.nan
+            return np.nan, None, None
         log_like_args = [self._multisource_num_pts, 
                             tuple([None]*len(self._multisource_num_pts))]
         log_like_func = MultiSourceNormal
@@ -107,8 +107,8 @@ class BayesFitnessFunction(FitnessFunction, Utilities, Priors, RandomSample,
             import pdb;pdb.set_trace()
             if return_nmll_only:
                 self._set_mean_proposal(individual, proposal)
-                return np.empty(self.parallel) * np.nan
-            return np.empty(self.parallel) * np.nan, None, None
+                return np.nan
+            return np.nan, None, None
 
         max_idx = np.unravel_index(step_list[-1].log_likes.argmax(),
                 step_list[-1].log_likes.shape)
@@ -117,9 +117,11 @@ class BayesFitnessFunction(FitnessFunction, Utilities, Priors, RandomSample,
 
         nmll = -1 * (marginal_log_likes[:, -1] -
                      marginal_log_likes[np.arange(self.parallel), smc.req_phi_index])
-
+        nmll_mean = np.nanmean(nmll)
+        print(nmll_mean)
+        print(str(individual))
         if return_nmll_only:
-            return nmll
+            return nmll_mean
         return nmll, step_list, vector_mcmc
 
     def _set_smc_hyperparams(self, smc_hyperparams):
@@ -138,10 +140,11 @@ class BayesFitnessFunction(FitnessFunction, Utilities, Priors, RandomSample,
             _ = self._cont_local_opt(individual)
 
     def _set_mean_proposal(self, individual, proposal):
-        n_params = individual.get_number_local_optimization_params()
+        n_params = individual.get_number_local_optimization_params() 
         params = proposal[0]
-        individual.set_local_optimization_params(
-                                    params.reshape((-1, n_params)).mean(axis=0))
+        new_params = params.reshape((-1, 
+                    n_params+len(self._multisource_num_pts))).mean(axis=0)
+        individual.set_local_optimization_params(new_params[:n_params])
 
     def evaluate_model(self, params, individual):
         self._eval_count += 1

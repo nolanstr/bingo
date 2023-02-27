@@ -21,9 +21,9 @@ class RandomSample:
             else:
                 replace = False
             
+            #bucketing
             self.subset_idxs[i] = np.sort([np.random.choice(idxs_subset) for \
                     idxs_subset in np.array_split(self.full_idxs[i], subset_size)])
-            import pdb;pdb.set_trace() 
             #self.subset_idxs[i] = np.sort(np.random.choice(self.full_idxs[i],
             #                                    subset_size, replace=replace))
         

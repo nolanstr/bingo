@@ -82,9 +82,10 @@ class Evaluation:
         for indv in population:
             if self._redundant or not indv.fit_set:
                 indv.fitness = self.fitness_function(indv)
+                #if np.isnan(indv.fitness):
+                #    import pdb;pdb.set_trace()
 
     def _multiprocess_eval(self, population):
-        print('Island evalution started!')
         num_procs = self._multiprocess if isinstance(self._multiprocess, int) \
                                                                        else None
         with Pool(processes=num_procs) as pool:
@@ -97,8 +98,6 @@ class Evaluation:
             for res in results:
                 indv, i = res.get()
                 population[i] = indv
-        
-        print('evaluation complete')
 
 def _fitness_job(individual, fitness_function, population_index):
     individual.fitness = fitness_function(individual)

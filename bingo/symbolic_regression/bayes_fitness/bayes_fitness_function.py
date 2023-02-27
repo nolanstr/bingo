@@ -40,7 +40,8 @@ class BayesFitnessFunction(FitnessFunction, Utilities, Priors, RandomSample,
                  multisource_info=None,
                  random_sample_info=None,
                  num_multistarts=4,
-                 noise_prior='ImproperUniform'):
+                 noise_prior='ImproperUniform',
+                 noise=None):
 
         self._cont_local_opt = continuous_local_opt
         Priors.__init__(self, noise_prior=noise_prior)
@@ -53,6 +54,13 @@ class BayesFitnessFunction(FitnessFunction, Utilities, Priors, RandomSample,
         self._num_multistarts = num_multistarts
         self._norm_phi = 1 / np.sqrt(self._cont_local_opt.training_data.x.shape[0])
         self._eval_count = 0
+
+        if noise is None:
+            self._noise = tuple([None]*len(self._multisource_num_pts))
+        else:
+            if isinstance(noise, np.ndarray):
+                noise = noise.tolist()
+            self._noise = noise
 
     def __call__(self, individual, return_nmll_only=True):
         
@@ -76,8 +84,7 @@ class BayesFitnessFunction(FitnessFunction, Utilities, Priors, RandomSample,
                 return np.nan
             return np.nan, None, None
 
-        log_like_args = [self._multisource_num_pts, 
-                            tuple([None]*len(self._multisource_num_pts))]
+        log_like_args = [self._multisource_num_pts, self._noise] 
         log_like_func = MultiSourceNormal
         vector_mcmc = VectorMCMC(lambda x: self.evaluate_model(x, individual),
                                  self.y_subset.flatten(),
