@@ -36,14 +36,13 @@ class BayesFitnessFunction(FitnessFunction, Utilities, Priors, RandomSample,
     Currently we are only using a uniformly weighted proposal --> This can
     change in the future.
     """
-    def __init__(self, continuous_local_opt, smc_hyperparams={},
+    def __init__(self, continuous_local_opt, check_data, smc_hyperparams={},
                  multisource_info=None,
                  random_sample_info=None,
                  num_multistarts=4,
                  noise_prior='ImproperUniform',
                  ensemble=10,
-                 noise=None, 
-                 check_physics=None):
+                 noise=None):
 
         self._cont_local_opt = continuous_local_opt
         Priors.__init__(self, noise_prior=noise_prior)
@@ -57,9 +56,7 @@ class BayesFitnessFunction(FitnessFunction, Utilities, Priors, RandomSample,
         self._norm_phi = 1 / np.sqrt(self._cont_local_opt.training_data.x.shape[0])
         self._eval_count = 0
         self._ensemble = ensemble
-        
-        temps = np.unique(self._cont_local_opt.training_data.x[:,1])
-        rates = np.unique(self._cont_local_opt.training_data.x[:,2])
+        self.check_data = check_data
 
         if noise is None:
             self._noise = [None]*len(self._multisource_num_pts)
@@ -67,11 +64,6 @@ class BayesFitnessFunction(FitnessFunction, Utilities, Priors, RandomSample,
             if isinstance(noise, np.ndarray):
                 noise = noise.tolist()
             self._noise = noise
-
-        if check_physics == None:
-            self.check_physics = lambda ind: True 
-        else:
-            self.check_physics = check_physics
 
     def __call__(self, individual, return_nmll_only=True):
         
@@ -99,11 +91,8 @@ class BayesFitnessFunction(FitnessFunction, Utilities, Priors, RandomSample,
             if return_nmll_only:
                 return np.nan
             return np.nan, None, None
-
-        if not self._model_check(individual):
-            if return_nmll_only:
-                return np.nan
-            return np.nan, None, None
+        else:
+            pass
 
         log_like_args = [self._multisource_num_pts, self._noise] 
         log_like_func = MultiSourceNormal
@@ -115,14 +104,23 @@ class BayesFitnessFunction(FitnessFunction, Utilities, Priors, RandomSample,
 
         mcmc_kernel = VectorMCMCKernel(vector_mcmc, param_order=param_names)
         smc = AdaptiveSampler(mcmc_kernel)
-        nmlls = np.empty(self._ensemble)
-        
-        for i in range(self._ensemble):
-            nmll = self._estimate_nmll(individual, smc, proposal)
-            nmlls[i] = nmll
+        if self._model_check(individual):
+            return np.nan
+        else:
+            nmlls = np.empty(self._ensemble)
+            
+            for i in range(self._ensemble):
+                nmll = self._estimate_nmll(individual, smc, proposal)
+                nmlls[i] = nmll
 
-        return np.nanmean(nmlls)
-
+            return np.nanmean(nmlls)
+    
+    def check_physics(self, ind):
+        f_init = ind.evaluate_equation_at(self.check_data)
+        if np.any(f_init<0): #checks for negative initial conditions
+            return False
+        return True
+    
     def _estimate_nmll(self, individual, smc, proposal):
 
         try:
@@ -145,14 +143,18 @@ class BayesFitnessFunction(FitnessFunction, Utilities, Priors, RandomSample,
         return nmll 
 
     def _model_check(self, ind):
+        """
+        If this returns True then the individual does not always have valid
+        output.
+        """
         self.do_local_opt(ind, None)
         f = ind.evaluate_equation_at(self._cont_local_opt.training_data.x)
         
         if np.all(np.isinf(f)) or np.any(np.isnan(f)):
             print('fail')
-            return False
-        else:
             return True
+        else:
+            return False
 
     def _set_smc_hyperparams(self, smc_hyperparams):
         
