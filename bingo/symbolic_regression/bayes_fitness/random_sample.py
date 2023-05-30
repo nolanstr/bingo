@@ -106,7 +106,7 @@ class RandomSample:
                      isinstance(random_sample_info, tuple),
                      isinstance(random_sample_info, np.ndarray)]):
             self._random_sample_subsets = random_sample_info
-            self._update_multisource(random_sample_info, uneven_sampling=True)
+            self._update_multisource(random_sample_info)
 
         else:
             self._random_sample_subsets = 1.0

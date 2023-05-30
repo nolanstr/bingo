@@ -1,6 +1,7 @@
 import numpy as np
 import pandas as pd
 import re
+import sympy
 
 from itertools import count
 
@@ -42,9 +43,13 @@ class SubgraphSeedGenerator:
 
 
 if __name__ == '__main__':
-    df = pd.read_pickle("C:/Users/dlranda2/Desktop/GPSR/bingo/research/data/1000_points_100_eq_16_stack.pkl")
-    row = df.iloc[4]
-    eq = row["approx_eq"]
+    eq = AGraph(equation="(X_0 - C_0)^2 + (X_1 - C_1)^2 - 1")
+    X_0, X_1, X_2 = sympy.symbols("X_0 X_1 X_2")
+    string = eq.get_formatted_string(format_="sympy")
+    exp = sympy.simplify(string)
+    expanded_exp = sympy.expand(exp)
+    import pdb;pdb.set_trace()
+    str(eq)
     print(eq)
     print(eq.command_array)
     print(SubgraphSeedGenerator.get_seed_strs(eq.command_array))

@@ -18,6 +18,27 @@ from ..evaluation.training_data import TrainingData
 
 LOGGER = logging.getLogger(__name__)
 
+class MLERegression(VectorBasedFunction):
+    """ Implicit Regression via MLE
+    paper: Optimality of Maximum Likelihood Estimation for Geometric Fitting and the KCR Lower Bound
+
+    Parameters
+    ----------
+    training_data : `ImplicitTrainingData`
+        data that is used in fitness evaluation.
+    required_params : int
+        (optional) minimum number of nonzero components of dot
+    """
+    def __init__(self, training_data, required_params=None):
+        super().__init__(training_data)
+        self._required_params = required_params
+
+    def evaluate_fitness_vector(self, individual):
+        self.eval_count += 1
+        f, df_dx = individual.evaluate_equation_with_x_gradient_at(
+            x=self.training_data.x)
+        J = np.sum((f.flatten()**2/np.linalg.norm(df_dx, axis=1, ord=2))**2)
+        return J 
 
 class ImplicitRegression(VectorBasedFunction):
     """ Implicit Regression, version 2

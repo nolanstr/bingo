@@ -2,7 +2,10 @@
 import re
 import numpy as np
 
-from bingo.symbolic_regression.agraph.operator_definitions import *
+from bingo.symbolic_regression.agraph.operator_definitions \
+    import INTEGER, VARIABLE, CONSTANT, ADDITION, SUBTRACTION, MULTIPLICATION, \
+           DIVISION, SIN, COS, SINH, COSH, EXPONENTIAL, LOGARITHM, POWER, ABS, \
+           SQRT
 
 operators = {"+", "-", "*", "/", "^"}
 functions = {"sin", "cos", "sinh", "cosh", "exp", "log", "abs", "sqrt"}
@@ -15,7 +18,7 @@ operator_map = {"+": ADDITION, "-": SUBTRACTION, "*": MULTIPLICATION,
                 "sqrt": SQRT}
 # matches X_### and C_### (case-insensitive)
 var_or_const_pattern = re.compile(r"([XC])_(\d+)", re.IGNORECASE)
-int_pattern = re.compile(r"\d+")  # matches ###
+int_pattern = re.compile(r"-?\d+")  # matches ###
 non_unary_op_pattern = re.compile(r"([*/^()])")  # matches *, /, ^, (, or )
 negative_pattern = re.compile(r"-([^\s\d])")  # matches -N where N = non-number
 

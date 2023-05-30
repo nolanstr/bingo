@@ -44,6 +44,7 @@ class BayesFitnessFunction(FitnessFunction, Utilities, Priors, RandomSample,
                  random_sample_info=None,
                  num_multistarts=4,
                  noise_prior='ImproperUniform',
+                 upper=100,
                  noise=None):
 
         self._cont_local_opt = continuous_local_opt
@@ -57,6 +58,7 @@ class BayesFitnessFunction(FitnessFunction, Utilities, Priors, RandomSample,
         self._num_multistarts = num_multistarts
         self._norm_phi = 1 / np.sqrt(self._cont_local_opt.training_data.x.shape[0])
         self._eval_count = 0
+        self._upper = upper
 
         if noise is None:
             self._noise = tuple([None]*len(self._multisource_num_pts))
@@ -66,13 +68,12 @@ class BayesFitnessFunction(FitnessFunction, Utilities, Priors, RandomSample,
             self._noise = noise
 
     def __call__(self, individual, return_nmll_only=True):
-        upper=5
         param_names, priors = self._create_priors(individual,
                                                   self._full_multisource_num_pts,
                                                   self._num_particles)
         n_params = individual.get_number_local_optimization_params()
         priors = [priors[i] for i in range(n_params)] + \
-            [ImproperUniform(0, upper) for _ in range(len(self._multisource_num_pts))] 
+            [ImproperUniform(0, self._upper) for _ in range(len(self._multisource_num_pts))] 
 
         try:
             proposal = self.generate_proposal_samples(individual,
@@ -81,7 +82,7 @@ class BayesFitnessFunction(FitnessFunction, Utilities, Priors, RandomSample,
 
             for i in range(len(self._multisource_num_pts)):
                 proposal[0][f"std_dev{i}"] = \
-                                uniform(0,upper).rvs(self._num_particles)
+                                uniform(0,self._upper).rvs(self._num_particles)
 
             if self._noise_prior == 'InverseGamma':
                 priors = self.upate_priors_for_inv_gamma(individual,

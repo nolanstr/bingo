@@ -29,7 +29,6 @@ class Utilities:
         ind.set_local_optimization_params(step_list[step_list_term].params.T)
         model_outputs = ind.evaluate_equation_at(x).T
         weights = step_list[step_list_term].weights
-
         if subset != None:
             subset += n_params
             noise_stds = step_list[step_list_term].params[:, subset].reshape((-1,1))
