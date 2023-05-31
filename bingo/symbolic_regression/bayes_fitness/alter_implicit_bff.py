@@ -8,6 +8,7 @@ import numpy as np
 from sympy import *
 import matplotlib.pyplot as plt
 
+from bingo.symbolic_regression.agraph.pytorch_agraph import PytorchAGraph
 from smcpy.log_likelihoods import BaseLogLike
 from smcpy import AdaptiveSampler
 from smcpy.mcmc.vector_mcmc import VectorMCMC
@@ -33,6 +34,9 @@ class ImplicitBayesFitnessFunction:
         self._ensemble = ensemble
 
     def __call__(self, individual, return_nmll_only=True):
+        
+        assert isinstance(individual, PytorchAGraph), \
+                "PytorchAgraph must be used"
 
         if not return_nmll_only:
             self._ensemble = 1
@@ -108,34 +112,20 @@ class ImplicitBayesFitnessFunction:
     def _eval_model(self, ind, X, params):
         vals = []
         variables = sy.symbols("".join([f" X_{i} " for i in range(X.shape[1])])[1:-1])
-
+        ind.set_local_optimization_params(params.T)
+        f = ind.evaluate_equation_at(X)
+        if f.shape[1] != params.shape[0]:
+            f = np.repeat(f, params.shape[0], axis=1)
+        df_dx = []
+        df2_d2x = []
         for param in params:
-            ind.set_local_optimization_params(param.T)
-            sy_ind = sy.sympify(ind.get_formatted_string(format_="sympy"), 
-                                    evaluate=False)
-            df_dx_ = []
-            df2_d2x_ = []
-            for dX in variables:
-                d_sy_ind = sy_ind.diff(dX)
-                d2_sy_ind = sy_ind.diff(dX, 2)
-                df_dx_.append([])
-                df2_d2x_.append([])
-                for x_i in X:
-                    d = dict(zip(variables, x_i))
-                    df_dx_[-1].append(d_sy_ind.evalf(subs=d))
-                    df2_d2x_[-1].append(d2_sy_ind.evalf(subs=d))
-            
-            df_dx_ = np.array(df_dx_).astype(np.float).T
-            df2_d2x_ = np.array(df2_d2x_).astype(np.float).T
-            f, df_dx = ind.evaluate_equation_with_x_gradient_at(
-                                                    x=X)
-            if np.any(df_dx == 0):
-                idxs = np.unique(np.where(df_dx==0)[0])
-                df_dx[idxs] = ind.evaluate_equation_with_x_gradient_at(
-                                x=X+self._h)[1][idxs]
-            vals.append([f, df_dx_, df2_d2x_])
+            ind.set_local_optimization_params(param)
+            partials = [ind.evaluate_equation_with_x_partial_at(X, [i]*2)[1] \
+                                for i in range(X.shape[1])]
+            df_dx += [np.hstack([partial[0] for partial in partials])]
+            df2_d2x += [np.hstack([partial[1] for partial in partials])]
 
-        return vals
+        return f, np.stack(df_dx), np.stack(df2_d2x)
 
     @property
     def eval_count(self):
@@ -170,27 +160,23 @@ class ImplicitLikelihood(BaseLogLike):
 
         ssqe = np.empty(inputs.shape[0])
         vals = self.model(inputs)
-        n = vals[0][0].shape[0]
-
-        for i, val in enumerate(vals):
-
-            f, df_dx, df2_d2x = val
-            
+        n = vals[0][:,0].shape[0]
+    
+        for i in range(inputs.shape[0]):
+            f, df_dx, df2_d2x = vals[0][:,i], vals[1][i], vals[2][i]
             v = df_dx / (1 + 2*df2_d2x)
-            a = np.sum(df2_d2x*np.square(v), axis=1)
-            b = np.sum(df_dx*v, axis=1)
-            c = f.flatten()
+            a = np.sum(df2_d2x*np.square(v), axis=1, keepdims=True)
+            b = np.sum(df_dx*v, axis=1, keepdims=True)
+            c = f.reshape((-1,1))
             l_pos = (-b + np.sqrt(np.square(b) - (4*a*c))) / (2*a)
             l_neg = (-b - np.sqrt(np.square(b) - (4*a*c))) / (2*a)
-            x_pos = -l_pos.reshape((-1,1)) * v
-            x_neg = -l_neg.reshape((-1,1)) * v
+            x_pos = -l_pos*v
+            x_neg = -l_neg*v
             ssqe_pos = np.square(np.linalg.norm(x_pos, axis=1)).sum()
             ssqe_neg = np.square(np.linalg.norm(x_neg, axis=1)).sum()
-            if np.all(np.isnan([ssqe_neg, ssqe_pos])):
-                ssqe[i] = np.inf
-            else:
-                ssqe[i] = np.nanmin([ssqe_pos, ssqe_neg]) 
+            ssqe[i] = np.nanmin([ssqe_pos, ssqe_neg])
 
+        ssqe[np.isnan(ssqe)] = np.inf
         term1 = (-n/2) * np.log(2*np.pi*var)
         term2 = (-1 / (2*var)) * ssqe
         log_like = term1 + term2

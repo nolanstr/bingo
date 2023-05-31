@@ -1,10 +1,11 @@
 """The genetic operation of evaluation.
 
-This module defines the a basic form of the evaluation phase of bingo
+This module defines the basic form of the evaluation phase of bingo
 evolutionary algorithms.
 """
 from multiprocessing import Pool
 import numpy as np
+
 
 class Evaluation:
     """Base phase for calculating fitness of a population.
@@ -21,6 +22,11 @@ class Evaluation:
         in the population.
     redundant : bool
         Whether to re-evaluate individuals that have been evaluated previously.
+        Default False.
+    multiprocess : int or bool
+        Number of processes to use in parallel evaluation
+        or False for serial evaluation. If using multiple processes,
+        individuals and fitness functions need to be pickle-able.
         Default False.
 
     Attributes
@@ -194,7 +200,8 @@ class StoreEvaluation:
                             pool.apply_async(stored_fitness_job,
                                              (indv, self.fitness_function, i)))
             for res in results:
-                indv, i = res.get()
+                indv, extra_evals, i = res.get()
+                self.fitness_function.eval_count += extra_evals
                 population[i] = indv
         
         print('evaluation complete')
@@ -207,3 +214,8 @@ def stored_fitness_job(individual, fitness_function, population_index):
 
 
 
+def _fitness_job(individual, fitness_function, population_index):
+    evals_before = fitness_function.eval_count
+    individual.fitness = fitness_function(individual)
+    extra_evals = fitness_function.eval_count - evals_before
+    return individual, extra_evals, population_index

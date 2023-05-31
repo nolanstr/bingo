@@ -17,6 +17,13 @@ class Chromosome(metaclass=ABCMeta):
 
     Parameters
     ----------
+<<<<<<< HEAD
+=======
+    genetic_age : int
+        age of the oldest component of the genetic material in the individual
+    fitness : numeric
+        starting value of fitness
+>>>>>>> davids_bingo/smc
     genetic_age : int
         age of the oldest component of the genetic material in the individual
     fitness :
@@ -26,7 +33,7 @@ class Chromosome(metaclass=ABCMeta):
 
     Attributes
     ----------
-    fitness
+    fitness : numeric
     genetic_age : int
                   age of the oldest component of the genetic material in the
                   individual
@@ -100,11 +107,20 @@ class Chromosome(metaclass=ABCMeta):
 
     @abstractmethod
     def distance(self, other):
-        """Distance from self to other chromosome
+        """Distance from self to other
+
+        Parameters
+        ----------
+        other : Chromosome
+            The other to compare to.
 
         Returns
         -------
         float
+<<<<<<< HEAD
             distance from self to other
+=======
+            Distance from self to other
+>>>>>>> davids_bingo/smc
         """
         raise NotImplementedError

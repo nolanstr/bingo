@@ -121,8 +121,14 @@ class AGraph(Equation):
         if use_simplification and not USING_PYTHON_SIMPLIFICATION:
             force_use_of_python_simplification()
 
+        # self._command_array
+        # self._simplified_command_array
+        # self._simplified_constants
+        # self._needs_opt
+        # self._modified
         self._init_command_array_and_const(equation)
 
+    # pylint: disable=attribute-defined-outside-init
     def _init_command_array_and_const(self, equation):
         if equation is None:
             self._command_array = np.empty([0, 3], dtype=int)
@@ -229,7 +235,7 @@ class AGraph(Equation):
         return self._needs_opt
 
     def get_number_local_optimization_params(self):
-        """number of parameters for local optimization
+        """Number of parameters for local optimization
 
         Count constants and set up for optimization
 
@@ -267,7 +273,7 @@ class AGraph(Equation):
         return list(self._simplified_constants)
 
     def get_utilized_commands(self):
-        """"Find which commands are utilized.
+        """Find which commands are utilized.
 
         Find the commands in the command array of the `AGraph` upon which the
         last command relies. This is inclusive of the last command.
@@ -433,7 +439,7 @@ class AGraph(Equation):
         return dist
 
     def __deepcopy__(self, memodict=None):
-        duplicate = AGraph()
+        duplicate = self.__class__()
         self._copy_agraph_values_to_new_graph(duplicate)
         return duplicate
 

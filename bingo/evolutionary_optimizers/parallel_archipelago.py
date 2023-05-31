@@ -1,4 +1,8 @@
 """The parallel implementation of the Archipelago
+<<<<<<< HEAD
+=======
+
+>>>>>>> davids_bingo/smc
 This module defines the Archipelago data structure that runs in parallel on
 multiple processors.
 """
@@ -42,8 +46,14 @@ class ParallelArchipelago(Archipelago):
     non_blocking : bool
         Specifies whether to use blocking or non-blocking execution. Default
         is non-blocking (True).
+<<<<<<< HEAD
     sync_frequency : int
         How frequently to update the average age for each island. Default 10
+=======
+    sync_frequency : int, optional
+        How frequently to update the average age for each island. Default 10.
+
+>>>>>>> davids_bingo/smc
     Attributes
     ----------
     island : `Island`
@@ -89,6 +99,8 @@ class ParallelArchipelago(Archipelago):
 
     def _step_through_generations(self, num_steps):
         if self._non_blocking:
+            if num_steps < self._sync_frequency:
+                self._sync_frequency = 1
             self._non_blocking_execution(num_steps)
         else:
             self.island.evolve(num_steps,
@@ -97,11 +109,11 @@ class ParallelArchipelago(Archipelago):
 
     def _non_blocking_execution(self, num_steps):
         if self.comm_rank == 0:
-            self._non_blocking_execution_master(num_steps)
+            self._non_blocking_execution_main(num_steps)
         else:
-            self._non_blocking_execution_slave()
+            self._non_blocking_execution_helper()
 
-    def _non_blocking_execution_master(self, num_steps):
+    def _non_blocking_execution_main(self, num_steps):
         total_age = {}
         average_age = self.generational_age
         target_age = average_age + num_steps
@@ -133,7 +145,7 @@ class ParallelArchipelago(Archipelago):
                                   tag=EXIT_NOTIFICATION)
             req.Wait()
 
-    def _non_blocking_execution_slave(self):
+    def _non_blocking_execution_helper(self):
         self._send_updated_age()
         while not self._has_exit_notification():
             self.island.evolve(self._sync_frequency,

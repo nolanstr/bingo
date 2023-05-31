@@ -9,6 +9,8 @@ appropriate fitness evaluator and a corresponding training data container.
 """
 import numpy as np
 import logging
+import numpy as np
+from .agraph.agraph import AGraph
 
 from ..evaluation.fitness_function import VectorBasedFunction
 from ..evaluation.gradient_mixin import VectorGradientMixin
@@ -47,25 +49,56 @@ class ExplicitRegression(VectorGradientMixin, VectorBasedFunction):
 
         Parameters
         ----------
-        individual : agraph
+        individual : Equation
             individual whose fitness is evaluated on `training_data`
+
+        Returns
+        -------
+        float
+            the fitness of the input Equation individual
         """
         self.eval_count += 1
         f_of_x = individual.evaluate_equation_at(self.training_data.x)
         error = f_of_x - self.training_data.y
         if not self._relative:
-            return error.flatten()
-        return (error / self.training_data.y).flatten()
+            return np.squeeze(error)
+        return np.squeeze(error / self.training_data.y)
 
     def get_fitness_vector_and_jacobian(self, individual):
+        r"""Fitness and jacobian evaluation of individual
+
+        fitness = y - f(x) where x and y are in the training_data (i.e.
+        training_data.x and training_data.y) and the function f is defined by
+        the input Equation individual.
+
+        jacobian = [[:math:`df_1/dc_1`, :math:`df_1/dc_2`, ...],
+                    [:math:`df_2/dc_1`, :math:`df_2/dc_2`, ...],
+                    ...]
+        where :math:`f_\#` is the fitness function corresponding with the
+        #th fitness vector entry and :math:`c_\#` is the corresponding
+        constant of the individual
+
+        Parameters
+        ----------
+        individual : Equation
+            individual whose fitness will be evaluated on `training_data`
+            and whose constants will be used for evaluating the jacobian
+
+        Returns
+        -------
+        fitness_vector, jacobian :
+            the vectorized fitness of the individual and
+            the partial derivatives of each fitness function with respect
+            to the individual's constants
+        """
         self.eval_count += 1
         f_of_x, df_dc = \
             individual.evaluate_equation_with_local_opt_gradient_at(
                     self.training_data.x)
         error = f_of_x - self.training_data.y
         if not self._relative:
-            return error.flatten(), df_dc
-        return (error / self.training_data.y).flatten(), \
+            return np.squeeze(error), df_dc
+        return np.squeeze(error / self.training_data.y), \
             df_dc / self.training_data.y
 
 
@@ -83,12 +116,15 @@ class ExplicitTrainingData(TrainingData):
         dependent variable
     """
     def __init__(self, x, y):
-        if x.ndim == 1:
-            # warnings.warn("Explicit training x should be 2 dim array, " +
-            #               "reshaping array")
-            x = x.reshape([-1, 1])
-        if x.ndim > 2:
-            raise TypeError('Explicit training x should be 2 dim array')
+        try:
+            if x.ndim == 1:
+                # warnings.warn("Explicit training x should be 2 dim array, " +
+                #               "reshaping array")
+                x = x.reshape([-1, 1])
+            if x.ndim > 2:
+                raise TypeError('Explicit training x should be 2 dim array')
+        except AttributeError:
+            pass
 
         if y.ndim == 1:
             # warnings.warn("Explicit training y should be 2 dim array, " +
@@ -134,7 +170,10 @@ class ExplicitTrainingData(TrainingData):
         int :
             index-able size
         """
-        return self._x.shape[0]
+        try:
+            return self._x.size(1)
+        except TypeError:
+            return self._x.shape[0]
 
 class SubsetExplicitTrainingData(TrainingData):
     """

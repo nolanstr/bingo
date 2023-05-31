@@ -44,8 +44,9 @@ class ImplicitRegression(VectorBasedFunction):
     """ Implicit Regression, version 2
 
     Fitness of this metric is related to the cos of angle between between
-    df_dx(x) and dx_dt. df_dx(x) is calculated through derivatives of the input
-    Equation individual at training_data.x. dx_dt is from training_data.dx_dt.
+    :math:`df_dx(x)` and :math:`dx_dt`. :math:`df_dx(x)` is calculated
+    through derivatives of the input Equation individual at training_data.x.
+    :math:`dx_dt` is from training_data.dx_dt.
 
     Different normalization and error checking are available.
 
@@ -61,6 +62,23 @@ class ImplicitRegression(VectorBasedFunction):
         self._required_params = required_params
 
     def evaluate_fitness_vector(self, individual):
+        """Evaluates the fitness of an implicit individual
+
+        Evaluates the fitness of the input Equation individual based
+        on the cos of the angle between :math:`df_dx(x)` and :math:`dx_dt`.
+        Where :math:`df_dx` comes from the equation's output w.r.t.
+        training_data.x and :math:`dx_dt` is training_data.dx_dt.
+
+        Parameters
+        ----------
+        individual : Equation
+            individual whose fitness is evaluated on `training_data`
+
+        Returns
+        -------
+        float
+            the fitness of the input Equation individual
+        """
         self.eval_count += 1
         _, df_dx = individual.evaluate_equation_with_x_gradient_at(
             x=self.training_data.x)
@@ -114,6 +132,7 @@ class ImplicitTrainingData(TrainingData):
     should be split in the input `x` by a row of np.nan.
     """
     def __init__(self, x, dx_dt=None):
+
         if x.ndim == 1:
             x = x.reshape([-1, 1])
         if x.ndim > 2:
@@ -148,8 +167,8 @@ class ImplicitTrainingData(TrainingData):
 
         Returns
         -------
-         ExplicitTrainingData :
-                                a subset
+        ExplicitTrainingData :
+            a subset
         """
         temp = ImplicitTrainingData(self._x[items, :], self._dx_dt[items, :])
         return temp
@@ -159,19 +178,19 @@ class ImplicitTrainingData(TrainingData):
 
         Returns
         -------
-         int :
-                index-able size
+        int :
+            index-able size
         """
         return self._x.shape[0]
 
 
 def _calculate_partials(X):
-    """Calculate derivatves with respect to time (first dimension).
+    """Calculate derivatives with respect to time (first dimension).
 
     Parameters
     ----------
      X : 2d numpy array
-        array for which derivatives will be calculated in the first diminsion.
+        array for which derivatives will be calculated in the first dimension.
         Distinct trajectories can be specified by separating the datasets
         within X by rows of np.nan
 
@@ -257,7 +276,6 @@ def _savitzky_golay_gram(y, window_size, order, deriv=0):
 
     def generalized_factorial(gf_a, gf_b):
         """Generalized factorial"""
-
         g_f = 1
         for j in range(gf_a - gf_b + 1, gf_a + 1):
             g_f *= j
