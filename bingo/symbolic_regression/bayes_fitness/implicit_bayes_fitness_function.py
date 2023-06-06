@@ -2,11 +2,13 @@ import os
 import sys
 import h5py
 import scipy
+import sympy as sy
 from scipy.stats import uniform, norm, invgamma
 import numpy as np
 from sympy import *
 import matplotlib.pyplot as plt
 
+from bingo.symbolic_regression.agraph.pytorch_agraph import PytorchAGraph
 from smcpy.log_likelihoods import BaseLogLike
 from smcpy import AdaptiveSampler
 from smcpy.mcmc.vector_mcmc import VectorMCMC
@@ -19,7 +21,7 @@ class ImplicitBayesFitnessFunction:
     
     def __init__(self, num_particles, mcmc_steps, ess_threshold, 
                                         training_data, clo, ensemble=8):
-
+        self._h = 5e-3
         self._eval_count = 0
         self._num_particles = num_particles
         self._mcmc_steps = mcmc_steps
@@ -32,6 +34,9 @@ class ImplicitBayesFitnessFunction:
         self._ensemble = ensemble
 
     def __call__(self, individual, return_nmll_only=True):
+        
+        assert isinstance(individual, PytorchAGraph), \
+                "PytorchAgraph must be used"
 
         if not return_nmll_only:
             self._ensemble = 1
@@ -62,9 +67,7 @@ class ImplicitBayesFitnessFunction:
                                          log_like_func)
 
                 mcmc_kernel = VectorMCMCKernel(vector_mcmc, param_order=param_names)
-                
                 smc = AdaptiveSampler(mcmc_kernel)
-                import pdb;pdb.set_trace()
                 step_list, marginal_log_likes = \
                     smc.sample(self._num_particles, self._mcmc_steps,
                                self._ess_threshold,
@@ -108,13 +111,19 @@ class ImplicitBayesFitnessFunction:
 
     def _eval_model(self, ind, X, params):
         vals = []
-        for param in params:
-            ind.set_local_optimization_params(param.T)
-            f, df_dx = ind.evaluate_equation_with_x_gradient_at(
-                                                    x=X)
-            vals.append([f, df_dx])
+        variables = sy.symbols("".join([f" X_{i} " for i in \
+                                    range(X.shape[1])])[1:-1])
+        ind.set_local_optimization_params(params.T)
+        ind._simplified_constants = np.array(params.T)
+        f = ind.evaluate_equation_at(X)
+        if f.shape[1] != params.shape[0]:
+            f = np.repeat(f, params.shape[0], axis=1)
 
-        return vals
+        partials = [ind.evaluate_equation_with_x_partial_at(X, [i]*2)[1] \
+                            for i in range(X.shape[1])]
+        df_dx = np.stack([partial[0] for partial in partials])
+        df2_d2x = np.stack([partial[1] for partial in partials])
+        return f, np.stack(df_dx), np.stack(df2_d2x)
 
     @property
     def eval_count(self):
@@ -141,34 +150,38 @@ class ImplicitLikelihood(BaseLogLike):
 
     def __call__(self, inputs):
         return self.estimate_likelihood(inputs)
-
+    
     def estimate_likelihood(self, inputs):
         std_dev = inputs[:,-1]
         var = std_dev ** 2
         inputs = inputs[:,:-1]
-
-        ssqe = np.empty(inputs.shape[0])
-        vals = self.model(inputs)
-        n = vals[0][0].shape[0]
-
-        for i, val in enumerate(vals):
-            f, df_dx = val
-            num = np.square(f.flatten()) 
-            den = np.square(np.linalg.norm(df_dx, axis=1, ord=2))
-            
-            ratio = num / den
-            if np.any(np.isnan(ratio)):
-                pass
-            ratio[np.isnan(ratio)] = 0
-
-            sum_alpha = np.sum(ratio)
-            _den = np.square(np.linalg.norm(df_dx, axis=1,
-                                        ord=2)).reshape((-1,1))
-            ssqe[i] = np.sum(np.square(
-                    np.linalg.norm(df_dx*f.reshape((-1,1))/_den, axis=1, ord=2)))
+        n, ssqe = self.estimate_ssqe(inputs)
         term1 = (-n/2) * np.log(2*np.pi*var)
         term2 = (-1 / (2*var)) * ssqe
         log_like = term1 + term2
+
         return log_like
+    
+    def estimate_ssqe(self, inputs):
 
+        vals = self.model(inputs)
+        n = vals[0][:,0].shape[0]
+        f, df_dx, df2_d2x = vals
+        v = df_dx / (1 + 2*df2_d2x)
+        
+        a = np.sum(df2_d2x*np.square(v), axis=0)
+        b = -np.sum(df_dx*v, axis=0)
+        c = f.astype(complex)
 
+        l_pos = (-b + np.sqrt(np.square(b) - (4*a*c))) / (2*a)
+        l_neg = (-b - np.sqrt(np.square(b) - (4*a*c))) / (2*a)
+        
+        x_pos = -l_pos*v
+        x_neg = -l_neg*v
+        ssqe_pos = np.square(np.linalg.norm(x_pos, axis=0)).sum(axis=0)
+        ssqe_neg = np.square(np.linalg.norm(x_neg, axis=0)).sum(axis=0)
+        ssqe_pos[np.isnan(ssqe_pos)] = np.inf
+        ssqe_neg[np.isnan(ssqe_neg)] = np.inf
+        ssqe = np.minimum(ssqe_pos, ssqe_neg)
+
+        return n, ssqe
