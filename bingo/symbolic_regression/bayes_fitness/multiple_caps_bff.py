@@ -77,9 +77,9 @@ class BayesFitnessFunction(FitnessFunction, Utilities, Priors, RandomSample,
             proposal = self.generate_proposal_samples(individual,
                                                   self._num_particles,
                                                   param_names)
-            #for i, cap in enumerate(self._caps):
-            #    proposal[0][f"std_dev{i}"] = \
-            #                    uniform(0,cap).rvs(self._num_particles)
+            for i, cap in enumerate(self._caps):
+                proposal[0][f"std_dev{i}"] = \
+                                uniform(0,cap).rvs(self._num_particles)
             if self._noise_prior == 'InverseGamma':
                 priors = self.upate_priors_for_inv_gamma(individual,
                                                          range(len(self._multisource_num_pts)),

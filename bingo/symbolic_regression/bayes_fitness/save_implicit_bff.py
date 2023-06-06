@@ -111,8 +111,7 @@ class ImplicitBayesFitnessFunction:
 
     def _eval_model(self, ind, X, params):
         vals = []
-        variables = sy.symbols("".join([f" X_{i} " for i in \
-                                    range(X.shape[1])])[1:-1])
+        variables = sy.symbols("".join([f" X_{i} " for i in range(X.shape[1])])[1:-1])
         ind.set_local_optimization_params(params.T)
         ind._simplified_constants = np.array(params.T)
         f = ind.evaluate_equation_at(X)
@@ -123,7 +122,8 @@ class ImplicitBayesFitnessFunction:
                             for i in range(X.shape[1])]
         df_dx = np.stack([partial[0] for partial in partials])
         df2_d2x = np.stack([partial[1] for partial in partials])
-        return f, np.stack(df_dx), np.stack(df2_d2x)
+
+        return f, np.stack(df_dx).T, np.stack(df2_d2x).T
 
     @property
     def eval_count(self):
@@ -150,38 +150,34 @@ class ImplicitLikelihood(BaseLogLike):
 
     def __call__(self, inputs):
         return self.estimate_likelihood(inputs)
-    
+
     def estimate_likelihood(self, inputs):
         std_dev = inputs[:,-1]
         var = std_dev ** 2
         inputs = inputs[:,:-1]
-        n, ssqe = self.estimate_ssqe(inputs)
+
+        ssqe = np.empty(inputs.shape[0])
+        vals = self.model(inputs)
+        n = vals[0][:,0].shape[0]
+        for i in range(inputs.shape[0]):
+            f, df_dx, df2_d2x = vals[0][:,i], vals[1][i], vals[2][i]
+            v = df_dx / (1 + 2*df2_d2x)
+            a = np.sum(df2_d2x*np.square(v), axis=1, keepdims=True)
+            b = np.sum(df_dx*v, axis=1, keepdims=True)
+            c = f.reshape((-1,1))
+            l_pos = (-b + np.sqrt(np.square(b) - (4*a*c))) / (2*a)
+            l_neg = (-b - np.sqrt(np.square(b) - (4*a*c))) / (2*a)
+            x_pos = -l_pos*v
+            x_neg = -l_neg*v
+            ssqe_pos = np.square(np.linalg.norm(x_pos, axis=1)).sum()
+            ssqe_neg = np.square(np.linalg.norm(x_neg, axis=1)).sum()
+            ssqe[i] = np.nanmin([ssqe_pos, ssqe_neg])
+            import pdb;pdb.set_trace()    
+
+        ssqe[np.isnan(ssqe)] = np.inf
         term1 = (-n/2) * np.log(2*np.pi*var)
         term2 = (-1 / (2*var)) * ssqe
         log_like = term1 + term2
-
+        print(ssqe)
         return log_like
-    
-    def estimate_ssqe(self, inputs):
 
-        vals = self.model(inputs)
-        n = vals[0][:,0].shape[0]
-        f, df_dx, df2_d2x = vals
-        v = df_dx / (1 + 2*df2_d2x)
-        
-        a = np.sum(df2_d2x*np.square(v), axis=0)
-        b = -np.sum(df_dx*v, axis=0)
-        c = f.astype(complex)
-
-        l_pos = (-b + np.sqrt(np.square(b) - (4*a*c))) / (2*a)
-        l_neg = (-b - np.sqrt(np.square(b) - (4*a*c))) / (2*a)
-        
-        x_pos = -l_pos*v
-        x_neg = -l_neg*v
-        ssqe_pos = np.square(np.linalg.norm(x_pos, axis=0)).sum(axis=0)
-        ssqe_neg = np.square(np.linalg.norm(x_neg, axis=0)).sum(axis=0)
-        ssqe_pos[np.isnan(ssqe_pos)] = np.inf
-        ssqe_neg[np.isnan(ssqe_neg)] = np.inf
-        ssqe = np.minimum(ssqe_pos, ssqe_neg)
-
-        return n, ssqe

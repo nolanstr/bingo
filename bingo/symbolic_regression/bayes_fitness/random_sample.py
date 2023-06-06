@@ -50,7 +50,7 @@ class RandomSample:
         idx_markers = np.cumsum([0] + list(self._full_multisource_num_pts))
         self.full_idxs = [all_idxs[idx_markers[i]:idx_markers[i+1]] for i in \
                                                             range(len(idx_markers)-1)]
-        self.subset_idxs = [np.empty(num_pts).astype(np.int) for num_pts \
+        self.subset_idxs = [np.empty(num_pts).astype(int) for num_pts \
                                     in self._multisource_num_pts]
 
     def get_dataset(self, subset=None):
