@@ -101,12 +101,16 @@ class ImplicitBayesFitnessFunction:
         params = ind.get_local_optimization_params()
         ssqe = self._cont_local_opt._fitness_function.evaluate_fitness_vector(
                                                                             ind)
-        ns = 0.01
+        #ns = 0.0001
         n = self._training_data.x.shape[0]
         var = ssqe / n 
+        #prop_dists = [norm(loc=mu, scale=abs(0.1*mu)) for mu in params] + \
+        #            [invgamma((ns + n)/2, scale=(ns*var + ssqe)/2)]
+        #prop_dists = [norm(loc=mu, scale=abs(0.1*mu)) for mu in params] + \
+        #            [uniform(loc=0, scale=2*var)]
         prop_dists = [norm(loc=mu, scale=abs(0.1*mu)) for mu in params] + \
-                    [invgamma((ns + n)/2, scale=(ns*var + ssqe)/2)]
-        
+                    [uniform(loc=0, scale=10)]
+        #import pdb;pdb.set_trace() 
         return prop_dists
 
     def _eval_model(self, ind, X, params):
@@ -182,6 +186,8 @@ class ImplicitLikelihood(BaseLogLike):
         ssqe_neg = np.square(np.linalg.norm(x_neg, axis=0)).sum(axis=0)
         ssqe_pos[np.isnan(ssqe_pos)] = np.inf
         ssqe_neg[np.isnan(ssqe_neg)] = np.inf
+        adjustment = 2 * (np.minimum(ssqe_pos, ssqe_neg)/\
+                            np.maximum(ssqe_pos, ssqe_neg))
         ssqe = np.minimum(ssqe_pos, ssqe_neg)
 
         return n, ssqe

@@ -35,10 +35,45 @@ class MLERegression(VectorBasedFunction):
 
     def evaluate_fitness_vector(self, individual):
         self.eval_count += 1
-        f, df_dx = individual.evaluate_equation_with_x_gradient_at(
-            x=self.training_data.x)
-        J = np.sum((f.flatten()**2/np.linalg.norm(df_dx, axis=1, ord=2))**2)
-        return J 
+        vals = self._eval_model(individual)
+        f, df_dx, df2_d2x = vals
+        v = df_dx / (1 + 2*df2_d2x)
+        
+        a = np.sum(df2_d2x*np.square(v), axis=0)
+        b = -np.sum(df_dx*v, axis=0)
+        c = f.astype(complex)
+
+        l_pos = (-b + np.sqrt(np.square(b) - (4*a*c))) / (2*a)
+        l_neg = (-b - np.sqrt(np.square(b) - (4*a*c))) / (2*a)
+        
+        x_pos = -l_pos*v
+        x_neg = -l_neg*v
+        ssqe_pos = np.square(np.linalg.norm(x_pos, axis=0)).sum(axis=0)
+        ssqe_neg = np.square(np.linalg.norm(x_neg, axis=0)).sum(axis=0)
+        ssqe_pos[np.isnan(ssqe_pos)] = np.inf
+        ssqe_neg[np.isnan(ssqe_neg)] = np.inf
+        ssqe = np.minimum(ssqe_pos, ssqe_neg)
+
+        return ssqe[0]
+
+    def _eval_model(self, ind):
+        vals = []
+        constants = ind.constants
+        if len(constants) == 0:
+            constants = np.zeros((0,1))
+        else:
+            constants = np.array(constants).reshape((-1,1))
+        ind.set_local_optimization_params(constants)
+        ind._simplified_constants = np.array(constants)
+        f = ind.evaluate_equation_at(self.training_data.x).reshape((1,-1,1))
+
+        partials = [ind.evaluate_equation_with_x_partial_at(
+                            self.training_data.x, [i]*2)[1] for i in \
+                            range(self.training_data.x.shape[1])]
+
+        df_dx = np.stack([partial[0] for partial in partials])
+        df2_d2x = np.stack([partial[1] for partial in partials])
+        return f, np.stack(df_dx), np.stack(df2_d2x)
 
 class ImplicitRegression(VectorBasedFunction):
     """ Implicit Regression, version 2
