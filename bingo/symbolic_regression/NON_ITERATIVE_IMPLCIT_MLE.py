@@ -20,74 +20,46 @@ LOGGER = logging.getLogger(__name__)
 
 class MLERegression(VectorBasedFunction):
     """ Implicit Regression via MLE
-        Approximation technique derived by Nolan Strauss (M').
-    """
+    paper: Optimality of Maximum Likelihood Estimation for Geometric Fitting and the KCR Lower Bound
 
-    def __init__(self, training_data, required_params=None, iters=10):
+    Parameters
+    ----------
+    training_data : `ImplicitTrainingData`
+        data that is used in fitness evaluation.
+    required_params : int
+        (optional) minimum number of nonzero components of dot
+    """
+    def __init__(self, training_data, required_params=None):
         super().__init__(training_data)
-        self.training_data = training_data
         self._required_params = required_params
-        self._iters = iters
-    
+
     def evaluate_fitness_vector(self, individual):
         self.eval_count += 1
-        data = self.training_data.x.copy()
-        dx = np.zeros_like(data)
-
-        for i in range(0, self._iters+1):
-            x_pos, x_neg = self.estimate_dx(individual, data)
-
-            ssqe_pos = np.square(np.linalg.norm(x_pos, axis=0)).sum(axis=0)
-            ssqe_neg = np.square(np.linalg.norm(x_neg, axis=0)).sum(axis=0)
-            ssqe_pos[np.isnan(ssqe_pos)] = np.inf
-            ssqe_neg[np.isnan(ssqe_neg)] = np.inf
-            
-            x_pos, x_neg = x_pos.squeeze().T, x_neg.squeeze().T
-            if ssqe_pos[0]<ssqe_neg[0]:
-                dx += x_pos
-                data += x_pos
-            else:
-                dx += x_neg
-                data += x_neg
-            ssqe = np.square(np.linalg.norm(dx, axis=1)).sum(axis=0)
-
-        ssqe = np.square(np.linalg.norm(dx, axis=1)).sum(axis=0)
-
-        return ssqe
-    
-    def estimate_dx(self, individual, data):
-        vals = self._eval_model(individual, data)
+        vals = self._eval_model(individual)
         f, df_dx, df2_d2x = vals
         v = df_dx / (1 + 2*df2_d2x)
         
         a = np.sum(df2_d2x*np.square(v), axis=0)
         b = -np.sum(df_dx*v, axis=0)
-        c = f.astype(complex) 
-        """
-        For complex numbers we can try only considering the real component?
-        """
+        c = f.astype(complex)
+
         l_pos = (-b + np.sqrt(np.square(b) - (4*a*c))) / (2*a)
         l_neg = (-b - np.sqrt(np.square(b) - (4*a*c))) / (2*a)
         
-        x_pos = (-l_pos*v)
-        x_neg = (-l_neg*v)
-        x_pos_angle = np.angle(x_pos)
-        x_neg_angle = np.angle(x_neg)
-        x_pos_scale = -np.cos(np.angle(x_pos))
-        x_neg_scale = -np.cos(np.angle(x_neg))
-        y_pos = np.sqrt(np.square(x_pos))
-        y_neg = np.sqrt(np.square(x_neg))
-        #x_pos = x_pos.real + np.sqrt(np.square(x_neg.imag))
-        #x_neg = x_neg.real + np.sqrt(np.square(x_pos.imag))
-        #import pdb;pdb.set_trace()
-        print(x_pos_scale)
-        print(x_neg_scale)
-        #import pdb;pdb.set_trace()
-        #return x_pos.real+(x_pos.imag*np.sin(x_pos_angle)), \
-        #            x_neg.real/x_neg_scale+(x_neg.imag*np.sin(x_neg_angle))
-        return x_pos.real, x_neg.real
+        x_pos = -l_pos*v
+        x_neg = -l_neg*v
+        ssqe_pos = np.square(np.linalg.norm(x_pos, axis=0)).sum(axis=0)
+        ssqe_neg = np.square(np.linalg.norm(x_neg, axis=0)).sum(axis=0)
+        ssqe_pos[np.isnan(ssqe_pos)] = np.inf
+        ssqe_neg[np.isnan(ssqe_neg)] = np.inf
+        ssqe = np.minimum(ssqe_pos, ssqe_neg)
+        if ssqe_pos[0]>ssqe_neg[0]:
+            print("Negitive is smaller")
+        else:
+            print("Positive is smaller")
+        return ssqe[0]
 
-    def _eval_model(self, ind, data):
+    def _eval_model(self, ind):
         vals = []
         constants = ind.constants
         if len(constants) == 0:
@@ -96,16 +68,15 @@ class MLERegression(VectorBasedFunction):
             constants = np.array(constants).reshape((-1,1))
         ind.set_local_optimization_params(constants)
         ind._simplified_constants = np.array(constants)
-        f = ind.evaluate_equation_at(data).reshape((1,-1,1))
+        f = ind.evaluate_equation_at(self.training_data.x).reshape((1,-1,1))
+
         partials = [ind.evaluate_equation_with_x_partial_at(
-                            data, [i]*2)[1] for i in \
-                            range(data.shape[1])]
+                            self.training_data.x, [i]*2)[1] for i in \
+                            range(self.training_data.x.shape[1])]
 
         df_dx = np.stack([partial[0] for partial in partials])
         df2_d2x = np.stack([partial[1] for partial in partials])
         return f, np.stack(df_dx), np.stack(df2_d2x)
-
-        
 
 class ImplicitRegression(VectorBasedFunction):
     """ Implicit Regression, version 2
