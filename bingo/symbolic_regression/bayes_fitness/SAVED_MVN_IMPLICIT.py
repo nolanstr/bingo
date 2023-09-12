@@ -17,7 +17,7 @@ from smcpy import ImproperUniform
 from mpi4py import MPI
 
 
-class ImplicitBayesFitnessFunction:
+class MVNImplicitBayesFitnessFunction:
     def __init__(
         self,
         num_particles,
@@ -37,9 +37,10 @@ class ImplicitBayesFitnessFunction:
         self._cont_local_opt = clo
 
         n = training_data.x.shape[0]
-        self._b = 1 / n
+        self._b = 1 / np.sqrt(n)
         self._ensemble = ensemble
         self._iters = iters
+        self._mvn_dims = training_data.x.shape[1]
 
     def __call__(self, individual, return_nmll_only=True):
         assert isinstance(individual, PytorchAGraph), "PytorchAgraph must be used"
@@ -52,8 +53,12 @@ class ImplicitBayesFitnessFunction:
             try:
                 ind = individual.copy()
                 n = ind.get_number_local_optimization_params()
-                priors = n * [ImproperUniform()] + [ImproperUniform(0, None)]
-                param_names = [f"P{i}" for i in range(n)] + ["std_dev"]
+                priors = [ImproperUniform()] * n + [
+                    ImproperUniform(0, None)
+                ] * self._mvn_dims
+                param_names = [f"P{i}" for i in range(n)] + [
+                    f"std_dev_{i}" for i in range(self._mvn_dims)
+                ]
                 prop_dists = self._estimate_proposal(ind)
                 sampled_params = [
                     dist.rvs(self._num_particles) for dist in prop_dists[:-1]
@@ -64,9 +69,9 @@ class ImplicitBayesFitnessFunction:
                     params_dict,
                     np.ones(self._num_particles) / self._num_particles,
                 ]
-                noise = None
+                noise = [None] * self._mvn_dims
                 log_like_args = [(self._training_data.x.shape[0]), noise, self._iters]
-                log_like_func = ImplicitLikelihood
+                log_like_func = MVNImplicitLikelihood
                 vector_mcmc = VectorMCMC(
                     lambda info: self._eval_model(ind, info[0], info[1]),
                     self._training_data.x,
@@ -113,16 +118,16 @@ class ImplicitBayesFitnessFunction:
         self._cont_local_opt(ind)
         params = ind.get_local_optimization_params()
         ssqe = self._cont_local_opt._fitness_function.evaluate_fitness_vector(ind)
+        # ns = 0.0001
         n = self._training_data.x.shape[0]
         var = ssqe / n
-        # ns = 0.0001
         # prop_dists = [norm(loc=mu, scale=abs(0.1*mu)) for mu in params] + \
         #            [invgamma((ns + n)/2, scale=(ns*var + ssqe)/2)]
         # prop_dists = [norm(loc=mu, scale=abs(0.1*mu)) for mu in params] + \
         #            [uniform(loc=0, scale=2*var)]
         prop_dists = [norm(loc=mu, scale=abs(0.1 * mu)) for mu in params] + [
             uniform(loc=0, scale=10)
-        ]
+        ] * self._mvn_dims
         return prop_dists
 
     def _eval_model(self, ind, X, params):
@@ -136,6 +141,8 @@ class ImplicitBayesFitnessFunction:
             ind.set_local_optimization_params(np.expand_dims(params[i], axis=1))
             ind._simplified_constants = np.array(np.expand_dims(params[i], axis=1))
             _f = ind.evaluate_equation_at(X[:, :, i])
+            # if f.shape[1] != params.shape[0]:
+            #    f = np.repeat(f, params.shape[0], axis=1)
 
             partials = [
                 ind.evaluate_equation_with_x_partial_at(X[:, :, i], [i] * 2)[1]
@@ -166,7 +173,7 @@ class ImplicitBayesFitnessFunction:
         self._cont_local_opt.training_data = training_data
 
 
-class ImplicitLikelihood(BaseLogLike):
+class MVNImplicitLikelihood(BaseLogLike):
     def __init__(self, model, data, args):
         self.model = model
         self.data = data
@@ -177,20 +184,30 @@ class ImplicitLikelihood(BaseLogLike):
         return self.estimate_likelihood(inputs)
 
     def estimate_likelihood(self, inputs):
-        std_dev = inputs[:, -1]
-        var = std_dev**2
-        inputs = inputs[:, :-1]
-        n, ssqe = self.estimate_ssqe(inputs)
+        std_dev = inputs[:, -len(self.args[1]) :]
+        n = std_dev.shape[0]
+        #identity_matrix = np.eye(self.data.shape[1])
+        #std_dev = std_dev[:, :, np.newaxis] * identity_matrix
+        #var = np.square(std_dev)
+        cov = (1 / (n - 1)) * np.matmul(std_dev.T, std_dev)
+        import pdb;pdb.set_trace()
+        # var[:,0,1] += 0.01
+        # var[:,1,0] += 0.01
+        inv_var = np.swapaxes(np.linalg.inv(var), 0, 1)
+        inputs = inputs[:, : -len(self.args[1])]
+        n, dx = self.estimate_ssqe(inputs)
+        dx = np.swapaxes(dx, 1, 2)
+        error_term = np.einsum("ijk,kjr,ijk->ji", dx, inv_var, dx).sum(axis=1)
 
-        term1 = (-n / 2) * np.log(2 * np.pi * var)
-        term2 = (-1 / (2 * var)) * ssqe
+        term1 = (-n * len(self.args[1]) * np.log(2 * np.pi) / 2) - (
+            n * np.log(np.linalg.det(var)) / 2
+        )
+        term2 = (-1 / 2) * error_term
         log_like = term1 + term2
-
         return log_like
 
     def estimate_dx(self, data, inputs):
         vals = self.model([data, inputs])
-        print(inputs.shape)
         f, df_dx, df2_d2x = vals
         v = df_dx / (1 + 2 * df2_d2x)
 
@@ -211,8 +228,7 @@ class ImplicitLikelihood(BaseLogLike):
         return x_pos, x_neg
 
     def estimate_ssqe(self, inputs):
-        shrinkage = 1 - 1/(self.data**2).sum(axis=0)
-        data = np.expand_dims(np.copy(shrinkage*self.data), axis=2)
+        data = np.expand_dims(np.copy(self.data), axis=2)
         data = np.repeat(data, inputs.shape[0], axis=2)
         dx = np.zeros_like(data)
 
@@ -230,8 +246,5 @@ class ImplicitLikelihood(BaseLogLike):
             dx += _dx
             data += _dx
             # ssqe = np.square(np.linalg.norm(dx, axis=0)).sum(axis=0)
-        
-        #import pdb;pdb.set_trace()
-        ssqe = np.square(np.linalg.norm(dx, axis=0)).sum(axis=0)
-        
-        return data.shape[0], ssqe
+
+        return data.shape[0], dx

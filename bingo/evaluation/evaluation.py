@@ -102,12 +102,21 @@ class Evaluation:
                             pool.apply_async(_fitness_job,
                                              (indv, self.fitness_function, i)))
             for res in results:
-                indv, i = res.get()
+                indv, extra_evals, i = res.get()
+                #indv, i = res.get()
+                self.fitness_function.eval_count += extra_evals
                 population[i] = indv
-
+ 
 def _fitness_job(individual, fitness_function, population_index):
+    evals_before = fitness_function.eval_count
     individual.fitness = fitness_function(individual)
-    return individual, population_index
+    extra_evals = fitness_function.eval_count - evals_before
+    return individual, extra_evals, population_index
+
+#def _fitness_job(individual, fitness_function, population_index):
+#    print("Population index", population_index)
+#    individual.fitness = fitness_function(individual)
+#    return individual, population_index
 
 
 class StoreEvaluation:

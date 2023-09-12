@@ -77,14 +77,6 @@ class MLERegression(VectorBasedFunction):
         x_neg_scale = -np.cos(np.angle(x_neg))
         y_pos = np.sqrt(np.square(x_pos))
         y_neg = np.sqrt(np.square(x_neg))
-        #x_pos = x_pos.real + np.sqrt(np.square(x_neg.imag))
-        #x_neg = x_neg.real + np.sqrt(np.square(x_pos.imag))
-        #import pdb;pdb.set_trace()
-        print(x_pos_scale)
-        print(x_neg_scale)
-        #import pdb;pdb.set_trace()
-        #return x_pos.real+(x_pos.imag*np.sin(x_pos_angle)), \
-        #            x_neg.real/x_neg_scale+(x_neg.imag*np.sin(x_neg_angle))
         return x_pos.real, x_neg.real
 
     def _eval_model(self, ind, data):
