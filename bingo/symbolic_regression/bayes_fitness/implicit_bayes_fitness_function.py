@@ -93,7 +93,10 @@ class ImplicitBayesFitnessFunction:
                     axis=0,
                 )
                 individual.set_local_optimization_params(mean_params[:-1])
-
+                shift_term = self.compute_ratio_term(ind, vector_mcmc)
+                
+                nmll += shift_term 
+                
                 fits[i] = nmll
 
                 if not return_nmll_only:
@@ -105,9 +108,20 @@ class ImplicitBayesFitnessFunction:
         fits[np.isinf(fits)] = np.nan
 
         if np.isnan(fits).sum() > self._ensemble:
-            return np.nan
+            if not return_nmll_only:
+                return np.nan, np.nan, np.nan
+            else:
+                return np.nan
         else:
             return np.nanmedian(fits)
+    
+    def compute_ratio_term(self, ind, vector_mcmc):
+        n, ssqe, dx = vector_mcmc._log_like_func.estimate_ssqe(
+                        ind.constants.T, return_ssqe_only=False)
+        pos_prob = np.prod(np.sum(dx.squeeze()>0, axis=0)/dx.shape[0])
+        neg_prob = np.prod(np.sum(dx.squeeze()<0, axis=0)/dx.shape[0])
+        
+        return np.log((pos_prob * neg_prob) / 0.25) 
 
     def _estimate_proposal(self, ind):
         self._cont_local_opt(ind)
@@ -126,8 +140,8 @@ class ImplicitBayesFitnessFunction:
         return prop_dists
 
     def _eval_model(self, ind, X, params):
-        vals = []
 
+        vals = []
         f = np.empty((X.shape[0], X.shape[2]))
         df_dx = np.zeros((X.shape[1], X.shape[0], X.shape[2]))
         df2_d2x = np.zeros_like(df_dx)
@@ -136,10 +150,9 @@ class ImplicitBayesFitnessFunction:
             ind.set_local_optimization_params(np.expand_dims(params[i], axis=1))
             ind._simplified_constants = np.array(np.expand_dims(params[i], axis=1))
             _f = ind.evaluate_equation_at(X[:, :, i])
-
             partials = [
-                ind.evaluate_equation_with_x_partial_at(X[:, :, i], [i] * 2)[1]
-                for i in range(X.shape[1])
+                ind.evaluate_equation_with_x_partial_at(X[:, :, i], [j] * 2)[1]
+                for j in range(X.shape[1])
             ]
             _df_dx = np.stack([partial[0] for partial in partials])
             _df2_d2x = np.stack([partial[1] for partial in partials])
@@ -167,6 +180,7 @@ class ImplicitBayesFitnessFunction:
 
 
 class ImplicitLikelihood(BaseLogLike):
+
     def __init__(self, model, data, args):
         self.model = model
         self.data = data
@@ -190,7 +204,6 @@ class ImplicitLikelihood(BaseLogLike):
 
     def estimate_dx(self, data, inputs):
         vals = self.model([data, inputs])
-        print(inputs.shape)
         f, df_dx, df2_d2x = vals
         v = df_dx / (1 + 2 * df2_d2x)
 
@@ -210,13 +223,16 @@ class ImplicitLikelihood(BaseLogLike):
         # x_neg = np.sqrt(np.square(x_neg.real) + np.square(x_neg.imag))
         return x_pos, x_neg
 
-    def estimate_ssqe(self, inputs):
-        shrinkage = 1 - 1/(self.data**2).sum(axis=0)
-        data = np.expand_dims(np.copy(shrinkage*self.data), axis=2)
+    def estimate_ssqe(self, inputs, return_ssqe_only=True, tol=1e-6):
+
+        #shrinkage = 1 - 1/(self.data**2).sum(axis=0)
+        #data = np.expand_dims(np.copy(shrinkage*self.data), axis=2)
+        data = np.expand_dims(np.copy(self.data), axis=2)
         data = np.repeat(data, inputs.shape[0], axis=2)
         dx = np.zeros_like(data)
 
         for i in range(0, self._iters + 1):
+            print(data.shape, inputs.shape)
             x_pos, x_neg = self.estimate_dx(data, inputs)
             ssqe_pos = np.square(np.linalg.norm(x_pos, axis=0)).sum(axis=0)
             ssqe_neg = np.square(np.linalg.norm(x_neg, axis=0)).sum(axis=0)
@@ -229,9 +245,12 @@ class ImplicitLikelihood(BaseLogLike):
             _dx = np.where(x_pos, x_neg, x_pos <= x_neg)
             dx += _dx
             data += _dx
+            if np.abs(_dx).min() < tol:
+                break
             # ssqe = np.square(np.linalg.norm(dx, axis=0)).sum(axis=0)
         
-        #import pdb;pdb.set_trace()
         ssqe = np.square(np.linalg.norm(dx, axis=0)).sum(axis=0)
-        
-        return data.shape[0], ssqe
+        if return_ssqe_only:
+            return data.shape[0], ssqe
+
+        return data.shape[0], ssqe, dx
