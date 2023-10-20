@@ -194,11 +194,15 @@ class ImplicitLikelihood(BaseLogLike):
         std_dev = inputs[:, -1]
         var = std_dev**2
         inputs = inputs[:, :-1]
-        n, ssqe = self.estimate_ssqe(inputs)
+        n, ssqe, dx = self.estimate_ssqe(inputs, return_ssqe_only=False)
 
         term1 = (-n / 2) * np.log(2 * np.pi * var)
         term2 = (-1 / (2 * var)) * ssqe
         log_like = term1 + term2
+        pos_prob = np.prod(np.sum(dx>0, axis=0)/dx.shape[0], axis=0)
+        neg_prob = np.prod(np.sum(dx<0, axis=0)/dx.shape[0], axis=0)
+        log_like += np.log(
+                (pos_prob*neg_prob)/pow(0.5, 2*dx.shape[1]))
 
         return log_like
 
@@ -245,7 +249,7 @@ class ImplicitLikelihood(BaseLogLike):
             _dx = np.where(x_pos, x_neg, x_pos <= x_neg)
             dx += _dx
             data += _dx
-            if np.abs(_dx).min() < tol:
+            if np.abs(_dx).max() < tol:
                 break
             # ssqe = np.square(np.linalg.norm(dx, axis=0)).sum(axis=0)
         
