@@ -77,6 +77,13 @@ class ImplicitBayesFitnessFunction:
 
                 mcmc_kernel = VectorMCMCKernel(vector_mcmc, param_order=param_names)
                 smc = AdaptiveSampler(mcmc_kernel)
+                shift_term = self.compute_ratio_term(ind, vector_mcmc)
+
+                if shift_term == 0:
+                    step_list, marginal_log_likes = [], []
+                    fits[i] = np.nan
+                    continue
+
                 step_list, marginal_log_likes = smc.sample(
                     self._num_particles,
                     self._mcmc_steps,
@@ -94,24 +101,18 @@ class ImplicitBayesFitnessFunction:
                 )
                 individual.set_local_optimization_params(mean_params[:-1])
                 shift_term = self.compute_ratio_term(ind, vector_mcmc)
-                
-                nmll += shift_term 
-                
-                fits[i] = nmll
+    
+                nmll += np.log(shift_term)
 
-                if not return_nmll_only:
-                    return np.nanmedian(fits), marginal_log_likes, step_list
+                fits[i] = nmll
 
             except:
                 fits[i] = np.nan
 
         fits[np.isinf(fits)] = np.nan
 
-        if np.isnan(fits).sum() > self._ensemble:
-            if not return_nmll_only:
-                return np.nan, np.nan, np.nan
-            else:
-                return np.nan
+        if not return_nmll_only:
+            return np.nanmedian(fits), marginal_log_likes, step_list
         else:
             return np.nanmedian(fits)
     
@@ -120,8 +121,8 @@ class ImplicitBayesFitnessFunction:
                         ind.constants.T, return_ssqe_only=False)
         pos_prob = np.prod(np.sum(dx.squeeze()>0, axis=0)/dx.shape[0])
         neg_prob = np.prod(np.sum(dx.squeeze()<0, axis=0)/dx.shape[0])
-        
-        return np.log((pos_prob * neg_prob) / 0.25) 
+
+        return ((pos_prob * neg_prob) / pow(0.5, 2*dx.shape[1]))
 
     def _estimate_proposal(self, ind):
         self._cont_local_opt(ind)
@@ -236,7 +237,6 @@ class ImplicitLikelihood(BaseLogLike):
         dx = np.zeros_like(data)
 
         for i in range(0, self._iters + 1):
-            print(data.shape, inputs.shape)
             x_pos, x_neg = self.estimate_dx(data, inputs)
             ssqe_pos = np.square(np.linalg.norm(x_pos, axis=0)).sum(axis=0)
             ssqe_neg = np.square(np.linalg.norm(x_neg, axis=0)).sum(axis=0)
