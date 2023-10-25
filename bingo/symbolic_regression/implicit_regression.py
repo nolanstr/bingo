@@ -23,39 +23,47 @@ class MLERegression(VectorBasedFunction):
         Approximation technique derived by Nolan Strauss (M').
     """
 
-    def __init__(self, training_data, required_params=None, iters=10):
+    def __init__(self, training_data, required_params=None, 
+                            iters=10, tol=1e-6, order="second"):
         super().__init__(training_data)
         self.training_data = training_data
         self._required_params = required_params
         self._iters = iters
-    
+        self._tol = tol
+        self._order = order
+
+        if self._order == "first":
+            self.estimate_dx = lambda ind, data: self.first_order_dx(ind, data)
+            print("First order is not recommended for MLE Regression")
+        elif self._order == "second":
+            self.estimate_dx = lambda ind, data: self.second_order_dx(ind, data)
+        else:
+            raise ValueError("Supported orders: first, second")
+
     def evaluate_fitness_vector(self, individual):
+
         self.eval_count += 1
         data = self.training_data.x.copy()
         dx = np.zeros_like(data)
 
         for i in range(0, self._iters+1):
-            x_pos, x_neg = self.estimate_dx(individual, data)
-
-            ssqe_pos = np.square(np.linalg.norm(x_pos, axis=0)).sum(axis=0)
-            ssqe_neg = np.square(np.linalg.norm(x_neg, axis=0)).sum(axis=0)
-            ssqe_pos[np.isnan(ssqe_pos)] = np.inf
-            ssqe_neg[np.isnan(ssqe_neg)] = np.inf
-            
-            x_pos, x_neg = x_pos.squeeze().T, x_neg.squeeze().T
-            if ssqe_pos[0]<ssqe_neg[0]:
-                dx += x_pos
-                data += x_pos
-            else:
-                dx += x_neg
-                data += x_neg
-            ssqe = np.square(np.linalg.norm(dx, axis=1)).sum(axis=0)
+            _dx = self.estimate_dx(individual, data)
+            dx += _dx
+            data += _dx
+            if np.abs(_dx).max() < self._tol:
+                break
 
         ssqe = np.square(np.linalg.norm(dx, axis=1)).sum(axis=0)
 
         return ssqe
-    
-    def estimate_dx(self, individual, data):
+
+    def first_order_dx(self, individual, data):
+        f, df_dx = individual.evaluate_equation_with_x_gradient_at(x=data)
+        dx = f*df_dx/np.linalg.norm(df_dx, axis=1, ord=2).reshape((-1,1)) 
+        #import pdb;pdb.set_trace()
+        return dx
+
+    def second_order_dx(self, individual, data):
         vals = self._eval_model(individual, data)
         f, df_dx, df2_d2x = vals
         v = df_dx / (1 + 2*df2_d2x)
@@ -69,15 +77,18 @@ class MLERegression(VectorBasedFunction):
         l_pos = (-b + np.sqrt(np.square(b) - (4*a*c))) / (2*a)
         l_neg = (-b - np.sqrt(np.square(b) - (4*a*c))) / (2*a)
         
-        x_pos = (-l_pos*v)
-        x_neg = (-l_neg*v)
-        x_pos_angle = np.angle(x_pos)
-        x_neg_angle = np.angle(x_neg)
-        x_pos_scale = -np.cos(np.angle(x_pos))
-        x_neg_scale = -np.cos(np.angle(x_neg))
-        y_pos = np.sqrt(np.square(x_pos))
-        y_neg = np.sqrt(np.square(x_neg))
-        return x_pos.real, x_neg.real
+        x_pos = (-l_pos*v).real
+        x_neg = (-l_neg*v).real
+
+        ssqe_pos = np.square(np.linalg.norm(x_pos, axis=0)).sum(axis=0)
+        ssqe_neg = np.square(np.linalg.norm(x_neg, axis=0)).sum(axis=0)
+        ssqe_pos[np.isnan(ssqe_pos)] = np.inf
+        ssqe_neg[np.isnan(ssqe_neg)] = np.inf
+        
+        x_pos, x_neg = x_pos.squeeze().T, x_neg.squeeze().T
+        dx = np.where(x_pos, x_neg, x_pos <= x_neg)
+
+        return dx
 
     def _eval_model(self, ind, data):
         vals = []

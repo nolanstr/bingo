@@ -77,6 +77,7 @@ class ImplicitBayesFitnessFunction:
 
                 mcmc_kernel = VectorMCMCKernel(vector_mcmc, param_order=param_names)
                 smc = AdaptiveSampler(mcmc_kernel)
+                #Computed with MLE estimate to filter bad models
                 shift_term = self.compute_ratio_term(ind, vector_mcmc)
 
                 if shift_term == 0:
@@ -102,7 +103,7 @@ class ImplicitBayesFitnessFunction:
                 individual.set_local_optimization_params(mean_params[:-1])
                 shift_term = self.compute_ratio_term(ind, vector_mcmc)
     
-                nmll += np.log(shift_term)
+                nmll -= np.log(shift_term)
 
                 fits[i] = nmll
 
@@ -119,9 +120,11 @@ class ImplicitBayesFitnessFunction:
     def compute_ratio_term(self, ind, vector_mcmc):
         n, ssqe, dx = vector_mcmc._log_like_func.estimate_ssqe(
                         ind.constants.T, return_ssqe_only=False)
-        pos_prob = np.prod(np.sum(dx.squeeze()>0, axis=0)/dx.shape[0])
-        neg_prob = np.prod(np.sum(dx.squeeze()<0, axis=0)/dx.shape[0])
-
+        pos_prob = np.prod(np.sum(dx.squeeze()>=0, axis=0)/dx.shape[0])
+        neg_prob = np.prod(np.sum(dx.squeeze()<=0, axis=0)/dx.shape[0])
+        if (pos_prob==1) and (neg_prob==1):
+            #If the model perfectly predicts all data.
+            return 1
         return ((pos_prob * neg_prob) / pow(0.5, 2*dx.shape[1]))
 
     def _estimate_proposal(self, ind):

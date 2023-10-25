@@ -147,6 +147,9 @@ class AGraph(Equation):
                 self._needs_opt = True
 
             self.command_array = command_array
+            self._simplified_command_array = command_array 
+            self._simplified_constants = constants
+
         else:
             raise TypeError("equation is not in a valid format")
 
