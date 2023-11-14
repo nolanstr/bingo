@@ -105,7 +105,6 @@ class ImplicitBayesFitnessFunction:
                 )
                 individual.set_local_optimization_params(mean_params[:-1])
                 shift_term = self.compute_ratio_term(ind, vector_mcmc)
-    
                 nmll -= np.log(shift_term)
 
                 fits[i] = nmll
@@ -221,11 +220,10 @@ class ImplicitLikelihood(BaseLogLike):
         term1 = (-n / 2) * np.log(2 * np.pi * var)
         term2 = (-1 / (2 * var)) * ssqe
         log_like = term1 + term2
-        pos_prob = np.prod(np.sum(dx>0, axis=0)/dx.shape[0], axis=0)
-        neg_prob = np.prod(np.sum(dx<0, axis=0)/dx.shape[0], axis=0)
-        log_like += np.log(
-                (pos_prob*neg_prob)/pow(0.5, 2*dx.shape[1]))
-
+        #pos_prob = np.prod(np.sum(dx>0, axis=0)/dx.shape[0], axis=0)
+        #neg_prob = np.prod(np.sum(dx<0, axis=0)/dx.shape[0], axis=0)
+        #log_like += np.log(
+        #        (pos_prob*neg_prob)/pow(0.5, 2*dx.shape[1]))
         return log_like
 
     def estimate_dx(self, data, inputs):

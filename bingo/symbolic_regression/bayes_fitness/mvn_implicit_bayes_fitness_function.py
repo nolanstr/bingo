@@ -191,6 +191,7 @@ class MVNImplicitLikelihood(BaseLogLike):
 
     def estimate_likelihood(self, inputs):
         cov_vals = inputs[:, -len(self.args[1]) :]
+        import pdb;pdb.set_trace()
         cov = np.stack([np.lib.stride_tricks.sliding_window_view(row,
             (self._mvn_dims)) for row in cov_vals])
         inputs = inputs[:, : -len(self.args[1])]

@@ -47,39 +47,42 @@ class ImplicitLaplaceBayesFitnessFunction:
         assert isinstance(individual, PytorchAGraph), "PytorchAgraph must be used"
 
         try:
-            ind = individual.copy()
-            p = ind.get_number_local_optimization_params()
-            dx, theta_hat, cov = self._perform_MLE(ind)
-            shift_term = self.compute_ratio_term(ind)
+            p = individual.get_number_local_optimization_params()
+            dx, theta_hat, cov = self._perform_MLE(individual)
+            shift_term = self.compute_ratio_term(individual)
             if shift_term == 0:
                 nmll = np.nan
             else:
                 K = cov.shape[0]
+                K=1
                 n = dx.shape[0]
+                cov = np.array([[0.1**2, 0],[0, 0.1**2]])
                 cov_inv = np.linalg.inv(cov)
                 term1 = (-n*K/2) * np.log(2*np.pi)
                 term2 = (-n/2) * np.log(np.linalg.det(cov))
-                term3 = -0.5 * np.sum(np.matmul(dx, np.matmul(cov_inv, dx.T)))
-                #import pdb;pdb.set_trace()
+                #term3 = -0.5 * np.sum(np.matmul(dx, np.matmul(cov_inv, dx.T)))
+                term3 = -0.5 * np.sum([np.matmul(dx_i.reshape((1,-1)), 
+                    np.matmul( cov_inv, dx_i.reshape((-1,1)))) for \
+                            dx_i in dx])
+                import pdb;pdb.set_trace()
                 #term3 = -0.5 * np.sum([np.matmul(dx_i, np.matmul(cov_inv, dx_i)) \
                 #                           for dx_i in dx])
                 log_likelihood = term1 + term2 + term3 
                 #nmll = ((1-self._b) * log_likelihood / (p*K/2)) + \
                 #            ((p/2) * np.log(self._b)) + np.log(shift_term)
                             #made changes to make consistent with iSMC
-                nmll = (1-self._b) * log_likelihood / p + \
-                                    np.log(shift_term)
-
+                nmll = (1-self._b) * log_likelihood + \
+                            (p/2)*np.log(self._b) + np.log(shift_term)
+                if shift_term==0:
+                    return np.nan
         except:
             nmll = np.nan
 
-        if not return_nmll_only:
-            return -nmll, marginal_log_likes, step_list
-        else:
-            return -nmll
+        return -nmll
     
     def compute_ratio_term(self, ind):
-        dx = self._cont_local_opt._fitness_function.estimate_dx(ind)
+        dx = self._cont_local_opt._fitness_function.estimate_dx(ind,
+                                                self.training_data.x)
         pos_prob = np.prod(np.sum(dx.squeeze()>=0, axis=0)/dx.shape[0])
         neg_prob = np.prod(np.sum(dx.squeeze()<=0, axis=0)/dx.shape[0])
         if (pos_prob==1) and (neg_prob==1):
@@ -91,10 +94,18 @@ class ImplicitLaplaceBayesFitnessFunction:
         
         self._cont_local_opt(ind)
         theta_hat = ind.get_local_optimization_params()
-        dx = self._cont_local_opt._fitness_function.estimate_dx(ind)
+        dx = self._cont_local_opt._fitness_function.estimate_dx(ind,
+                                                self.training_data.x)
         n = self._training_data.x.shape[0]
+        ssqe = np.square(np.linalg.norm(dx, axis=1)).sum(axis=0)
+        var_ols = ssqe/n
+        f, df = ind.evaluate_equation_with_x_gradient_at(
+                                                self.training_data.x)
+        #cov = var_ols * np.linalg.inv(f_deriv.T.dot(f_deriv))
         cov = np.array([np.matmul(dx_i.reshape((-1,1)), dx_i.reshape((1,-1))) \
                             for dx_i in dx]).sum(axis=0) / n
+        cov *= var_ols
+
         return dx, theta_hat, cov
 
     def _eval_model(self, ind, X, params):
@@ -113,7 +124,6 @@ class ImplicitLaplaceBayesFitnessFunction:
         #    ind.evaluate_equation_with_x_partial_at(X, [j] * 2)[1]
         #    for j in range(X.shape[1])
         #]
-        import pdb;pdb.set_trace()
         vals = []
         f = np.empty((X.shape[0], X.shape[2]))
         df_dx = np.zeros((X.shape[1], X.shape[0], X.shape[2]))
