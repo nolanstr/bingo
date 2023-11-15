@@ -107,12 +107,17 @@ class Evaluation:
                     indv, _, i = res.get()
                 else:
                     indv, i = res.get()
+                self.fitness_function.eval_count += extra_evals
                 population[i] = indv
-
+ 
 def _fitness_job(individual, fitness_function, population_index):
-    print(individual, population_index)
     individual.fitness = fitness_function(individual)
     return individual, population_index
+
+#def _fitness_job(individual, fitness_function, population_index):
+#    print("Population index", population_index)
+#    individual.fitness = fitness_function(individual)
+#    return individual, population_index
 
 
 class StoreEvaluation:
