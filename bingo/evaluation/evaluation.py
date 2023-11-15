@@ -102,10 +102,15 @@ class Evaluation:
                             pool.apply_async(_fitness_job,
                                              (indv, self.fitness_function, i)))
             for res in results:
-                indv, i = res.get()
+
+                if len(res.get()) == 3:
+                    indv, _, i = res.get()
+                else:
+                    indv, i = res.get()
                 population[i] = indv
 
 def _fitness_job(individual, fitness_function, population_index):
+    print(individual, population_index)
     individual.fitness = fitness_function(individual)
     return individual, population_index
 
