@@ -92,6 +92,7 @@ class MVNImplicitBayesFitnessFunction:
                     required_phi=self._b,
                     proposal=proposal,
                 )
+                import pdb;pdb.set_trace()
                 nmll = -1 * (
                     marginal_log_likes[-1] - marginal_log_likes[smc.req_phi_index[0]]
                 )
@@ -130,7 +131,7 @@ class MVNImplicitBayesFitnessFunction:
         #            [uniform(loc=0, scale=2*var)]
         prop_dists = [norm(loc=mu, scale=abs(0.1 * mu)) for mu in params]
         cov_dists = [item for i in range(1, self._mvn_dims+1) \
-                        for item in [uniform(loc=0,scale=10)] + \
+                        for item in [uniform(loc=0,scale=0.1)] + \
                         [uniform(loc=-0.05,scale=0.1)]*(self._mvn_dims-i)]
         return prop_dists + cov_dists
 
@@ -188,10 +189,9 @@ class MVNImplicitLikelihood(BaseLogLike):
 
     def __call__(self, inputs):
         return self.estimate_likelihood(inputs)
-
+    
     def estimate_likelihood(self, inputs):
         cov_vals = inputs[:, -len(self.args[1]) :]
-        import pdb;pdb.set_trace()
         cov = np.stack([np.lib.stride_tricks.sliding_window_view(row,
             (self._mvn_dims)) for row in cov_vals])
         inputs = inputs[:, : -len(self.args[1])]
@@ -199,7 +199,8 @@ class MVNImplicitLikelihood(BaseLogLike):
 
         error_term = np.empty(inputs.shape[0])
         inv_cov = np.empty_like(cov)
-
+        #cov[:,0,1] = 0
+        #cov[:,1,0] = 0
         for i, (dx_i, cov_i) in enumerate(zip(dx.T, cov)):
             dx_i = np.expand_dims(dx_i.T, axis=2)
             inv_cov_i = np.linalg.inv(cov_i)
@@ -207,17 +208,16 @@ class MVNImplicitLikelihood(BaseLogLike):
             errors = np.matmul(np.swapaxes(dx_i, 1, 2), np.matmul(inv_cov_i,
                                 dx_i)).sum()
             if errors<0:
-                #import pdb;pdb.set_trace()
                 pass
             error_term[i] = errors
-        #import pdb;pdb.set_trace()
+
         K = self._mvn_dims
-        log_like = (-n*K*np.log(2*np.pi)/2) + (-n*np.log(np.linalg.det(cov))/2)\
-                + (-0.5 * error_term)
-        #import pdb;pdb.set_trace()
+        term1 = -n*K*np.log(2*np.pi)/2
+        term2 = -n*np.log(np.linalg.det(cov))/2
+        term3 = -0.5*error_term
+        log_like = term1 + term2 + term3
+
         log_like[np.isnan(log_like)] = -np.inf
-        print(cov)
-        print(log_like)
 
         return log_like
 

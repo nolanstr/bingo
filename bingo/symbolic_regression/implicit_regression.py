@@ -33,10 +33,10 @@ class MLERegression(VectorBasedFunction):
         self._order = order
 
         if self._order == "first":
-            self.estimate_dx = lambda ind, data: self.first_order_dx(ind, data)
+            self.estimate_dx = self.first_order_dx
             print("First order is not recommended for MLE Regression")
         elif self._order == "second":
-            self.estimate_dx = lambda ind, data: self.second_order_dx(ind, data)
+            self.estimate_dx = self.second_order_dx
         else:
             raise ValueError("Supported orders: first, second")
 

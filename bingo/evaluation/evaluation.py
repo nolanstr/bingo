@@ -107,7 +107,6 @@ class Evaluation:
                     indv, _, i = res.get()
                 else:
                     indv, i = res.get()
-                self.fitness_function.eval_count += extra_evals
                 population[i] = indv
  
 def _fitness_job(individual, fitness_function, population_index):

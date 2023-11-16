@@ -49,28 +49,26 @@ class ImplicitLaplaceBayesFitnessFunction:
         try:
             p = individual.get_number_local_optimization_params()
             dx, theta_hat, cov = self._perform_MLE(individual)
+            vals, vecs = np.linalg.eig(cov)
+            cov = np.diag(vals)
+            import pdb;pdb.set_trace()
+            """
+            Removing correlation terms due to apriori knowledge of noise. 
+            """
             shift_term = self.compute_ratio_term(individual)
             if shift_term == 0:
-                nmll = np.nan
+                return np.nan
             else:
                 K = cov.shape[0]
-                K=1
                 n = dx.shape[0]
-                cov = np.array([[0.1**2, 0],[0, 0.1**2]])
                 cov_inv = np.linalg.inv(cov)
                 term1 = (-n*K/2) * np.log(2*np.pi)
                 term2 = (-n/2) * np.log(np.linalg.det(cov))
-                #term3 = -0.5 * np.sum(np.matmul(dx, np.matmul(cov_inv, dx.T)))
                 term3 = -0.5 * np.sum([np.matmul(dx_i.reshape((1,-1)), 
-                    np.matmul( cov_inv, dx_i.reshape((-1,1)))) for \
+                    np.matmul(cov_inv, dx_i.reshape((-1,1)))) for \
                             dx_i in dx])
-                import pdb;pdb.set_trace()
-                #term3 = -0.5 * np.sum([np.matmul(dx_i, np.matmul(cov_inv, dx_i)) \
-                #                           for dx_i in dx])
                 log_likelihood = term1 + term2 + term3 
-                #nmll = ((1-self._b) * log_likelihood / (p*K/2)) + \
-                #            ((p/2) * np.log(self._b)) + np.log(shift_term)
-                            #made changes to make consistent with iSMC
+
                 nmll = (1-self._b) * log_likelihood + \
                             (p/2)*np.log(self._b) + np.log(shift_term)
                 if shift_term==0:
@@ -96,34 +94,17 @@ class ImplicitLaplaceBayesFitnessFunction:
         theta_hat = ind.get_local_optimization_params()
         dx = self._cont_local_opt._fitness_function.estimate_dx(ind,
                                                 self.training_data.x)
+        dx *= (self.training_data.x.shape[1]**0.5)
         n = self._training_data.x.shape[0]
         ssqe = np.square(np.linalg.norm(dx, axis=1)).sum(axis=0)
         var_ols = ssqe/n
         f, df = ind.evaluate_equation_with_x_gradient_at(
                                                 self.training_data.x)
-        #cov = var_ols * np.linalg.inv(f_deriv.T.dot(f_deriv))
-        cov = np.array([np.matmul(dx_i.reshape((-1,1)), dx_i.reshape((1,-1))) \
-                            for dx_i in dx]).sum(axis=0) / n
-        cov *= var_ols
+        cov = np.cov(dx.T)
 
         return dx, theta_hat, cov
 
     def _eval_model(self, ind, X, params):
-        #n_data = X.shape[0]
-        #n,m,d = X.shape
-        #X_cust = X.transpose(2, 0, 1).reshape((-1, m))
-        #X_cust = torch.from_numpy(X_cust).double()
-        #cust_params = np.repeat(params, n_data, axis=0)
-        #ind.set_local_optimization_params(cust_params.T)
-        #ind._simplified_constants = np.array(cust_params.T)
-        #_f = evaluation_backend.evaluate(ind._simplified_command_array,
-        #                            X_cust, ind._simplified_constants,
-        #                            final=False, return_pytorch_repr=True)
-        #import pdb;pdb.set_trace()
-        #partials = [
-        #    ind.evaluate_equation_with_x_partial_at(X, [j] * 2)[1]
-        #    for j in range(X.shape[1])
-        #]
         vals = []
         f = np.empty((X.shape[0], X.shape[2]))
         df_dx = np.zeros((X.shape[1], X.shape[0], X.shape[2]))
@@ -159,83 +140,3 @@ class ImplicitLaplaceBayesFitnessFunction:
     @training_data.setter
     def training_data(self, training_data):
         self._cont_local_opt.training_data = training_data
-
-
-class ImplicitLikelihood(BaseLogLike):
-
-    def __init__(self, model, data, args):
-        self.model = model
-        self.data = data
-        self.args = args[0:2]
-        self._iters = args[2]
-
-    def __call__(self, inputs):
-        return self.estimate_likelihood(inputs)
-
-    def estimate_likelihood(self, inputs):
-        std_dev = inputs[:, -1]
-        var = std_dev**2
-        inputs = inputs[:, :-1]
-        n, ssqe, dx = self.estimate_ssqe(inputs, return_ssqe_only=False)
-
-        term1 = (-n / 2) * np.log(2 * np.pi * var)
-        term2 = (-1 / (2 * var)) * ssqe
-        log_like = term1 + term2
-        pos_prob = np.prod(np.sum(dx>0, axis=0)/dx.shape[0], axis=0)
-        neg_prob = np.prod(np.sum(dx<0, axis=0)/dx.shape[0], axis=0)
-        log_like += np.log(
-                (pos_prob*neg_prob)/pow(0.5, 2*dx.shape[1]))
-
-        return log_like
-
-    def estimate_dx(self, data, inputs):
-        vals = self.model([data, inputs])
-        f, df_dx, df2_d2x = vals
-        v = df_dx / (1 + 2 * df2_d2x)
-
-        a = np.sum(df2_d2x * np.square(v), axis=0)
-        b = -np.sum(df_dx * v, axis=0)
-        c = f.astype(complex)
-
-        l_pos = (-b + np.sqrt(np.square(b) - (4 * a * c))) / (2 * a)
-        l_neg = (-b - np.sqrt(np.square(b) - (4 * a * c))) / (2 * a)
-
-        x_pos = (-l_pos * v).real
-        x_neg = (-l_neg * v).real
-        # x_pos = x_pos.real + np.sqrt(np.square(x_pos.imag))
-        # x_neg = x_neg.real + np.sqrt(np.square(x_neg.imag))
-
-        # x_pos = np.sqrt(np.square(x_pos.real) + np.square(x_pos.imag))
-        # x_neg = np.sqrt(np.square(x_neg.real) + np.square(x_neg.imag))
-        return x_pos, x_neg
-
-    def estimate_ssqe(self, inputs, return_ssqe_only=True, tol=1e-6):
-
-        #shrinkage = 1 - 1/(self.data**2).sum(axis=0)
-        #data = np.expand_dims(np.copy(shrinkage*self.data), axis=2)
-        data = np.expand_dims(np.copy(self.data), axis=2)
-        data = np.repeat(data, inputs.shape[0], axis=2)
-        dx = np.zeros_like(data)
-
-        for i in range(0, self._iters + 1):
-            x_pos, x_neg = self.estimate_dx(data, inputs)
-            ssqe_pos = np.square(np.linalg.norm(x_pos, axis=0)).sum(axis=0)
-            ssqe_neg = np.square(np.linalg.norm(x_neg, axis=0)).sum(axis=0)
-            ssqe_pos[np.isnan(ssqe_pos)] = np.inf
-            ssqe_neg[np.isnan(ssqe_neg)] = np.inf
-
-            x_pos = np.swapaxes(x_pos, 0, 1)
-            x_neg = np.swapaxes(x_neg, 0, 1)
-
-            _dx = np.where(x_pos, x_neg, x_pos <= x_neg)
-            dx += _dx
-            data += _dx
-            if np.abs(_dx).max() < tol:
-                break
-            # ssqe = np.square(np.linalg.norm(dx, axis=0)).sum(axis=0)
-        
-        ssqe = np.square(np.linalg.norm(dx, axis=0)).sum(axis=0)
-        if return_ssqe_only:
-            return data.shape[0], ssqe
-
-        return data.shape[0], ssqe, dx
