@@ -238,20 +238,17 @@ class ImplicitLikelihood(BaseLogLike):
         l_pos = (-b + np.sqrt(np.square(b) - (4 * a * c))) / (2 * a)
         l_neg = (-b - np.sqrt(np.square(b) - (4 * a * c))) / (2 * a)
 
-        x_pos = (-l_pos * v).real
-        x_neg = (-l_neg * v).real
-        # x_pos = x_pos.real + np.sqrt(np.square(x_pos.imag))
-        # x_neg = x_neg.real + np.sqrt(np.square(x_neg.imag))
-
-        # x_pos = np.sqrt(np.square(x_pos.real) + np.square(x_pos.imag))
-        # x_neg = np.sqrt(np.square(x_neg.real) + np.square(x_neg.imag))
+        #x_pos = (-l_pos * v).real
+        #x_neg = (-l_neg * v).real
+        x_pos = -l_pos * v
+        x_neg = -l_neg * v
         return x_pos, x_neg
 
     def estimate_ssqe(self, inputs, return_ssqe_only=True, tol=1e-6):
 
         #shrinkage = 1 - 1/(self.data**2).sum(axis=0)
         #data = np.expand_dims(np.copy(shrinkage*self.data), axis=2)
-        data = np.expand_dims(np.copy(self.data), axis=2)
+        data = np.expand_dims(np.copy(self.data), axis=2).astype(complex)
         data = np.repeat(data, inputs.shape[0], axis=2)
         dx = np.zeros_like(data)
 
@@ -271,7 +268,8 @@ class ImplicitLikelihood(BaseLogLike):
             if np.abs(_dx).max() < tol:
                 break
             # ssqe = np.square(np.linalg.norm(dx, axis=0)).sum(axis=0)
-        
+
+        dx = dx.real
         ssqe = np.square(np.linalg.norm(dx, axis=0)).sum(axis=0)
         if return_ssqe_only:
             return data.shape[0], ssqe

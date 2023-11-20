@@ -24,13 +24,15 @@ class MLERegression(VectorBasedFunction):
     """
 
     def __init__(self, training_data, required_params=None, 
-                            iters=10, tol=1e-6, order="second"):
+                    iters=10, tol=1e-6, order="second",
+                    gradient_method=None):
         super().__init__(training_data)
         self.training_data = training_data
         self._required_params = required_params
         self._iters = iters
         self._tol = tol
         self._order = order
+        self._gradient_method = gradient_method
 
         if self._order == "first":
             self.estimate_dx = self.first_order_dx
@@ -39,11 +41,20 @@ class MLERegression(VectorBasedFunction):
             self.estimate_dx = self.second_order_dx
         else:
             raise ValueError("Supported orders: first, second")
+    
+    def evaluate_fitness_vector(self, individual, return_dx=False):
 
-    def evaluate_fitness_vector(self, individual):
+        if self._gradient_method == "momentum":
+            return self.momentum_fitness(individual, return_dx)
+        if self._gradient_method == "newton":
+            return self.newton_fitness(individual, return_dx)
+        else:
+            return self.standard_fitness(individual, return_dx)
+
+    def standard_fitness(self, individual, return_dx=False):
 
         self.eval_count += 1
-        data = self.training_data.x.copy()
+        data = self.training_data.x.copy().astype(complex)
         dx = np.zeros_like(data)
 
         for i in range(0, self._iters+1):
@@ -52,15 +63,65 @@ class MLERegression(VectorBasedFunction):
             data += _dx
             if np.abs(_dx).max() < self._tol:
                 break
-
+        dx = dx.real
         ssqe = np.square(np.linalg.norm(dx, axis=1)).sum(axis=0)
 
+        if return_dx:
+            return ssqe, dx
+        return ssqe
+
+    def momentum_fitness(self, individual, return_dx=False):
+
+        self.eval_count += 1
+        data = self.training_data.x.copy()
+        dx = np.zeros_like(data)
+        rho = 0.3
+        alpha = 0.6
+
+        _dx = self.estimate_dx(individual, data)
+        for i in range(0, self._iters+1):
+            _dx_i_star = self.estimate_dx(individual, data + _dx)
+            _dx = rho*_dx + alpha*_dx_i_star
+            dx += _dx
+            data += _dx
+            if np.abs(_dx).max() < self._tol:
+                break
+
+        ssqe = np.square(np.linalg.norm(dx, axis=1)).sum(axis=0)
+        
+        if return_dx:
+            return ssqe, dx
+        return ssqe
+
+    def newton_fitness(self, individual, return_dx=False):
+
+        self.eval_count += 1
+        data = self.training_data.x.copy()
+        dx = np.zeros_like(data)
+
+        for i in range(0, self._iters+1):
+            vals = self._eval_model(individual, data)
+            f, df_dx, df2_d2x = vals
+            _dx = (df_dx.squeeze()/df2_d2x.squeeze()).T
+            dx -= _dx
+            data -= _dx
+            if np.abs(_dx).max() < self._tol:
+                break
+        ssqe = np.square(np.linalg.norm(dx, axis=1)).sum(axis=0)
+        
+        if return_dx:
+            return ssqe, dx
         return ssqe
 
     def first_order_dx(self, individual, data):
-        f, df_dx = individual.evaluate_equation_with_x_gradient_at(x=data)
-        dx = f*df_dx/np.linalg.norm(df_dx, axis=1, ord=2).reshape((-1,1)) 
-        #import pdb;pdb.set_trace()
+        
+        vals = self._eval_model(individual, data)
+        f, df_dx, df2_d2x = vals
+        f, df_dx = f.reshape((-1,1)), df_dx.squeeze().T
+        #individual.set_local_optimization_params([2.3, -3.4, 1.])
+        dx = -f*df_dx/\
+                (np.linalg.norm(df_dx, axis=1, ord=2).reshape((-1,1))**2)
+
         return dx
 
     def second_order_dx(self, individual, data):
@@ -76,17 +137,13 @@ class MLERegression(VectorBasedFunction):
         """
         l_pos = (-b + np.sqrt(np.square(b) - (4*a*c))) / (2*a)
         l_neg = (-b - np.sqrt(np.square(b) - (4*a*c))) / (2*a)
-        
-        x_pos = (-l_pos*v).real
-        x_neg = (-l_neg*v).real
+        x_pos = (-l_pos*v).squeeze().T
+        x_neg = (-l_neg*v).squeeze().T
 
-        ssqe_pos = np.square(np.linalg.norm(x_pos, axis=0)).sum(axis=0)
-        ssqe_neg = np.square(np.linalg.norm(x_neg, axis=0)).sum(axis=0)
-        ssqe_pos[np.isnan(ssqe_pos)] = np.inf
-        ssqe_neg[np.isnan(ssqe_neg)] = np.inf
+        ssqe_pos = np.square(np.linalg.norm(x_pos, axis=1)).reshape((-1,1))
+        ssqe_neg = np.square(np.linalg.norm(x_neg, axis=1)).reshape((-1,1))
         
-        x_pos, x_neg = x_pos.squeeze().T, x_neg.squeeze().T
-        dx = np.where(x_pos, x_neg, x_pos <= x_neg)
+        dx = np.where(x_neg, x_pos, ssqe_neg<=ssqe_pos) 
 
         return dx
 
