@@ -8,7 +8,7 @@ from abc import ABCMeta, abstractmethod
 import numpy as np
 
 from .fitness_function \
-    import mean_absolute_error, mean_squared_error, root_mean_squared_error
+    import mean_absolute_error, mean_squared_error, root_mean_squared_error, iSMC_error
 
 
 class GradientMixin(metaclass=ABCMeta):
@@ -68,6 +68,10 @@ class VectorGradientMixin(GradientMixin):
             self._metric = root_mean_squared_error
             self._metric_derivative = \
                 VectorGradientMixin._root_mean_squared_error_derivative
+        elif metric in ["implicit", "iSMC", "ismc"]:
+            self._metric = iSMC_error
+            self._metric_derivative = \
+                VectorGradientMixin._iSMC_error_derivative
         else:
             raise ValueError("Invalid metric for vector gradient mixin")
 
@@ -135,3 +139,7 @@ class VectorGradientMixin(GradientMixin):
     def _root_mean_squared_error_derivative(fitness_vector, fitness_partials):
         return 1/np.sqrt(np.mean(np.square(fitness_vector))) \
                * np.mean(fitness_vector * fitness_partials, axis=1)
+
+    @staticmethod
+    def _iSMC_error_derivative(fitness_vector, fitness_partials):
+        return np.sum(fitness_partials, axis=1)

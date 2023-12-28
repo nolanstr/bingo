@@ -14,112 +14,186 @@ import logging
 import numpy as np
 
 from ..evaluation.fitness_function import VectorBasedFunction
-from ..evaluation.gradient_mixin import VectorGradientMixin
 from ..evaluation.training_data import TrainingData
 
 LOGGER = logging.getLogger(__name__)
 
-
-class MLERegression(VectorGradientMixin, VectorBasedFunction):
+class MLERegression(VectorBasedFunction):
     """ Implicit Regression via MLE
         Approximation technique derived by Nolan Strauss (M').
     """
 
     def __init__(self, training_data, required_params=None, 
-                    iters=50, tol=1e-6, _f_tol=1):
-        super().__init__(training_data, "iSMC")
+                    iters=50, tol=1e-6, order="second",
+                    gradient_method=None, _f_tol=1):
+        super().__init__(training_data)
         self.training_data = training_data
         self._required_params = required_params
         self._iters = iters
         self._tol = tol
+        self._order = order
+        self._gradient_method = gradient_method
         self._f_tol = _f_tol
 
-        self.estimate_dx = self.first_order_dx
+        if self._order == "first":
+            self.estimate_dx = self.first_order_dx
+        elif self._order == "second":
+            self.estimate_dx = self.second_order_dx
+        else:
+            raise ValueError("Supported orders: first, second")
     
-    def evaluate_fitness_vector(self, ind,
-                            return_all_fitness_metrics=False):
+    def evaluate_fitness_vector(self, individual, return_all_fitness_metrics=False):
 
-        self.eval_count += 1
-        dx = self.standard_fitness(ind)
-        error = np.linalg.norm(dx, axis=1)
+        if self._gradient_method == "momentum":
+            return self.momentum_fitness(individual, return_all_fitness_metrics)
+        if self._gradient_method == "newton":
+            return self.newton_fitness(individual, return_all_fitness_metrics)
+        else:
+            return self.standard_fitness(individual, return_all_fitness_metrics)
 
-        if return_all_fitness_metrics:
-            ssqe = error.sum()
-            return dx, error, ssqe 
-        return error
-
-    def get_fitness_vector_and_jacobian(self, ind, 
-                            return_all_fitness_metrics=False):
-
-        self.eval_count += 1
-        #dx, data = self.standard_fitness(ind, return_data=True)
-        #f, df_dx, df_dc, d2f_dxdc = ind.evaluate_equation_with_both_gradients_at(data)
-        #error = np.linalg.norm(dx, axis=1)
-        #dJ_dc = self.compute_dJdc(f, df_dx, df_dc, d2f_dxdc)
-        #f, J, dJ_dc = ind.compute_iSMC_dJ_dc(data)
-        f, J, dx, df_dx, dJ_dc = ind.iSMC_pytorch(
-                                        self.training_data.x,
-                                        )
-        if return_all_fitness_metrics:
-            return f, J, dx, df_dx, dJ_dc
-        return np.power(np.linalg.norm(dx, ord=2, axis=1), 2), dJ_dc
-    
-    def compute_dJdc(self, f, df_dx, df_dc, d2f_dxdc):
-
-        l2_norm_term = np.linalg.norm(df_dx, ord=2,
-                                    axis=1).reshape((-1,1))**2
-        d2f_dxdc = np.transpose(d2f_dxdc, (0, 2, 1))
-        nabla_c_l2_term = 2*np.einsum('ij,jkl->il', 
-                                    df_dx, d2f_dxdc)#.sum(axis=1)
-        numerator_right = (f.reshape((-1,1))**2) * nabla_c_l2_term
-        numerator_left = l2_norm_term * \
-                                (2*f.reshape((-1,1))*df_dc)
-        dJ_dc = (numerator_left - numerator_right) / (l2_norm_term)**2
-        return dJ_dc
-
-    def standard_fitness(self, ind, 
-                return_data=False):
+    def standard_fitness(self, individual, 
+                return_all_fitness_metrics=False):
 
         self.eval_count += 1
         data = self.training_data.x.copy()
+
+        if self._order == "second":
+            data = data.astype(complex)
         dx = np.zeros_like(data)
         
         for i in range(0, self._iters+1):
-            _dx = self.estimate_dx(ind, data)
+            _dx = self.estimate_dx(individual, data)
             dx += _dx
             data += _dx
             if np.abs(_dx).max() < self._tol:
                 break
         dx = dx.real
-        f = ind.evaluate_equation_at(data)
-        f[np.isnan(f)] = np.inf 
+        #ssqe = np.square(np.linalg.norm(dx, axis=1)).sum(axis=0)
+        f = individual.evaluate_equation_at(data)
+        f[np.isnan(f)] = np.inf #replace nan with inf for tolerance check
 
         if np.std(f)>self._f_tol: 
+        #if np.max(abs(_dx))>self._f_tol: 
+            ssqe = np.nan
+            #dx *= np.std(f)
             dx = np.ones_like(dx)*np.nan
+            #ssqe += np.std(f) * f.shape[0]
             """
             Model failed to converge to if the standard deviation of f(X) 
             is greater than some tolerance.
 
             Including mean of f as part of fitness
             """
-        if return_data:
-            return dx, data
-        return dx 
+        if return_all_fitness_metrics:
+            return 
+        return np.squeeze(np.linalg.norm(dx, axis=1))
 
-    def first_order_dx(self, ind, data):
+    def momentum_fitness(self, individual, 
+                    return_all_fitness_metrics=False):
+
+        self.eval_count += 1
+        data = self.training_data.x.copy()
+        dx = np.zeros_like(data)
+        rho = 0.3
+        alpha = 0.6
+
+        _dx = self.estimate_dx(individual, data)
+        for i in range(0, self._iters+1):
+            _dx_i_star = self.estimate_dx(individual, data + _dx)
+            _dx = rho*_dx + alpha*_dx_i_star
+            dx += _dx
+            data += _dx
+            if np.abs(_dx).max() < self._tol:
+                break
+
+        ssqe = np.square(np.linalg.norm(dx, axis=1)).sum(axis=0)
         
-        f, df_dx = ind.evaluate_equation_with_x_gradient_at(data)
+        if return_all_fitness_metrics:
+            return ssqe, dx
+        return ssqe
+
+    def newton_fitness(self, individual, 
+                        return_all_fitness_metrics=False):
+
+        self.eval_count += 1
+        data = self.training_data.x.copy()
+        dx = np.zeros_like(data)
+
+        for i in range(0, self._iters+1):
+            vals = self._eval_model(individual, data)
+            f, df_dx, df2_d2x = vals
+            _dx = (df_dx.squeeze()/df2_d2x.squeeze()).T
+            dx -= _dx
+            data -= _dx
+            if np.abs(_dx).max() < self._tol:
+                break
+        ssqe = np.square(np.linalg.norm(dx, axis=1)).sum(axis=0)
+        
+        if return_all_fitness_metrics:
+            return ssqe, dx
+        return ssqe
+
+    def first_order_dx(self, individual, data):
+        
+        vals = self._eval_model(individual, data, True)
+        f, df_dx, df2_d2x = vals
         dx = -f*df_dx/\
                 (np.linalg.norm(df_dx, axis=1, ord=2).reshape((-1,1))**2)
         return dx
 
+    def second_order_dx(self, individual, data):
+        vals = self._eval_model(individual, data, False)
+        f, df_dx, df2_d2x = vals
+        v = df_dx / (1 + 2*df2_d2x)
+        
+        a = np.sum(df2_d2x*np.square(v), axis=0)
+        b = -np.sum(df_dx*v, axis=0)
+        c = f.astype(complex) 
+        """
+        For complex numbers we can try only considering the real component?
+        """
+        l_pos = (-b + np.sqrt(np.square(b) - (4*a*c))) / (2*a)
+        l_neg = (-b - np.sqrt(np.square(b) - (4*a*c))) / (2*a)
+        x_pos = (-l_pos*v).squeeze().T
+        x_neg = (-l_neg*v).squeeze().T
+
+        ssqe_pos = np.square(np.linalg.norm(x_pos, axis=1)).reshape((-1,1))
+        ssqe_neg = np.square(np.linalg.norm(x_neg, axis=1)).reshape((-1,1))
+        
+        dx = np.where(x_neg, x_pos, ssqe_neg<=ssqe_pos) 
+
+        return dx
+
+    def _eval_model(self, ind, data, first_order=True):
+
+        if first_order:
+            f, df_dx = ind.evaluate_equation_with_x_gradient_at(data)
+            return f, df_dx, None
+
+        constants = ind.constants
+        if len(constants) == 0:
+            constants = np.zeros((0,1))
+        else:
+            constants = np.array(constants).reshape((-1,1))
+        ind.set_local_optimization_params(constants)
+        ind._simplified_constants = np.array(constants)
+        f = ind.evaluate_equation_at(data).reshape((1,-1,1))
+        partials = [ind.evaluate_equation_with_x_partial_at(
+                            data, [i]*2)[1] for i in \
+                            range(data.shape[1])]
+
+        df_dx = np.stack([partial[0] for partial in partials])
+        df2_d2x = np.stack([partial[1] for partial in partials])
+        return f, np.stack(df_dx), np.stack(df2_d2x)
+
+        
 
 class ImplicitRegression(VectorBasedFunction):
     """ Implicit Regression, version 2
 
     Fitness of this metric is related to the cos of angle between between
     :math:`df_dx(x)` and :math:`dx_dt`. :math:`df_dx(x)` is calculated
-    through derivatives of the input Equation ind at training_data.x.
+    through derivatives of the input Equation individual at training_data.x.
     :math:`dx_dt` is from training_data.dx_dt.
 
     Different normalization and error checking are available.
@@ -135,26 +209,26 @@ class ImplicitRegression(VectorBasedFunction):
         super().__init__(training_data)
         self._required_params = required_params
 
-    def evaluate_fitness_vector(self, ind):
-        """Evaluates the fitness of an implicit ind
+    def evaluate_fitness_vector(self, individual):
+        """Evaluates the fitness of an implicit individual
 
-        Evaluates the fitness of the input Equation ind based
+        Evaluates the fitness of the input Equation individual based
         on the cos of the angle between :math:`df_dx(x)` and :math:`dx_dt`.
         Where :math:`df_dx` comes from the equation's output w.r.t.
         training_data.x and :math:`dx_dt` is training_data.dx_dt.
 
         Parameters
         ----------
-        ind : Equation
-            ind whose fitness is evaluated on `training_data`
+        individual : Equation
+            individual whose fitness is evaluated on `training_data`
 
         Returns
         -------
         float
-            the fitness of the input Equation ind
+            the fitness of the input Equation individual
         """
         self.eval_count += 1
-        _, df_dx = ind.evaluate_equation_with_x_gradient_at(
+        _, df_dx = individual.evaluate_equation_with_x_gradient_at(
             x=self.training_data.x)
 
         dot_product = df_dx * self.training_data.dx_dt

@@ -23,6 +23,9 @@ def mean_squared_error(vector):
     """Calculate the mean squared error of an error vector"""
     return np.mean(np.square(vector))
 
+def iSMC_error(vector):
+    """Custom error for iSMC Laplace"""
+    return np.sum(vector)
 
 class FitnessFunction(metaclass=ABCMeta):
     """Fitness evaluation metric for individuals.
@@ -89,6 +92,8 @@ class VectorBasedFunction(FitnessFunction, metaclass=ABCMeta):
             self._metric = mean_squared_error
         elif metric in ["root mean squared error", "rmse"]:
             self._metric = root_mean_squared_error
+        elif metric in ["implicit", "iSMC", "ismc"]:
+            self._metric = iSMC_error
         else:
             raise ValueError("Invalid metric for Fitness Function")
 

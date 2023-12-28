@@ -122,6 +122,117 @@ def _evaluate_with_derivative(pytorch_repr, x, constants, wrt_param_x_or_c):
         derivative = derivative[:, :, 0]
     return _reshape_output(eval.detach().numpy(), constants, x), derivative.T.detach().numpy()
 
+def evaluate_with_both_derivatives(pytorch_repr, x, constants):
+    """Evaluate equation and take derivative wrt x, c, and xc
+
+    Parameters
+    ----------
+    stack : Nx3 numpy array of int.
+        The command stack associated with an equation. N is the number of
+        commands in the stack.
+    x : MxD array of numeric.
+        Values at which to evaluate the equations. D is the number of
+        dimensions in x and M is the number of data points in x.
+    constants : list-like of numeric.
+        numeric constants that are used in the equation
+
+    Returns
+    -------
+    MxD array of numeric or MxL array of numeric:
+        Derivatives of all dimensions of x/constants at location x.
+    """
+    if isinstance(x, np.ndarray):
+        x = torch.from_numpy(x.T).double()
+    constants = _get_torch_const(constants, x.size(1))
+    eval, deriv_1, deriv_2, deriv_3 = _evaluate_with_both_derivatives(
+                    pytorch_repr, x, constants)
+    return eval, deriv_1, deriv_2, deriv_3
+
+def _evaluate_with_both_derivatives(pytorch_repr, x, constants):
+    """
+    deriv_1 = (x_term, n) --> deriv_1(2,:) --> df_dx1
+    deriv_2 = (c_term, n) --> deriv_2(1,:) --> df_dc1
+    deriv_3 = (x_term, c_term, n) --> deriv_3(1,2,:) --> d^2f/dx1dc2
+    """
+    inputs1 = x
+    inputs2 = constants
+    inputs1.requires_grad = True
+    inputs2.requires_grad = True
+    x_dim, n_x = x.shape
+    c_dim, n_c = constants.shape[:-1]
+
+    eval = evaluate(pytorch_repr, x, constants, final=False)
+
+    if eval.requires_grad:
+        deriv_1 = grad(outputs=eval.sum(), 
+                        inputs=inputs1, 
+                        create_graph=True, retain_graph=True, 
+                        allow_unused=False)[0]
+        deriv_2 = grad(outputs=eval.sum(), 
+                        inputs=inputs2, 
+                        create_graph=True, retain_graph=True, 
+                        allow_unused=False)[0].squeeze()
+        deriv_3 = torch.zeros((x_dim, c_dim, n_x))
+        for i in range(x_dim):
+            deriv_3[i,:,:] = grad(outputs=deriv_1[i,:].sum(), 
+                                  inputs=inputs2, 
+                                  create_graph=True, 
+                                  retain_graph=True, 
+                                  allow_unused=False)[0].squeeze()
+    return eval.detach().numpy().reshape((n_x, -1)),\
+            deriv_1.T.detach().numpy(), deriv_2.T.detach().numpy(),\
+            deriv_3.detach().numpy()
+
+def evaluate_iSMC_dJ_dc(pytorch_repr, x, constants):
+    """Evaluate equation and take derivative wrt x, c, and xc
+
+    Parameters
+    ----------
+    stack : Nx3 numpy array of int.
+        The command stack associated with an equation. N is the number of
+        commands in the stack.
+    x : MxD array of numeric.
+        Values at which to evaluate the equations. D is the number of
+        dimensions in x and M is the number of data points in x.
+    constants : list-like of numeric.
+        numeric constants that are used in the equation
+
+    Returns
+    -------
+    MxD array of numeric or MxL array of numeric:
+        Derivatives of all dimensions of x/constants at location x.
+    """
+    if isinstance(x, np.ndarray):
+        x = torch.from_numpy(x.T).double()
+    constants = _get_torch_const(constants, x.size(1))
+    eval, J, dJ_dc = _evaluate_iSMC_dJ_dc(
+                    pytorch_repr, x, constants)
+    return eval, J, dJ_dc 
+
+def _evaluate_iSMC_dJ_dc(pytorch_repr, x, constants):
+    inputs1 = x
+    inputs2 = constants
+    inputs1.requires_grad = True
+    inputs2.requires_grad = True
+    x_dim, n_x = x.shape
+    c_dim, n_c = constants.shape[:-1]
+
+    eval = evaluate(pytorch_repr, x, constants, final=False)
+
+    if eval.requires_grad:
+        df_dx = grad(outputs=eval.sum(), 
+                        inputs=inputs1, 
+                        create_graph=True, retain_graph=True, 
+                        allow_unused=False)[0]
+        J = torch.pow(eval, 2) / \
+            torch.pow(torch.norm(df_dx, dim=0).reshape((-1,1)), 2)
+        dJ_dc = grad(outputs=J.sum(), 
+                        inputs=inputs2, 
+                        create_graph=True, retain_graph=True, 
+                        allow_unused=False)[0].squeeze()
+    return eval.detach().numpy().reshape((n_x, -1)),\
+            J.detach().numpy().reshape((n_x, -1)),\
+            dJ_dc.T.detach().numpy()
 
 def evaluate_with_partials(pytorch_repr, x, constants, partial_order):
     if isinstance(x, np.ndarray):
