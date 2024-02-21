@@ -55,30 +55,30 @@ def execute_first_order_optimization(pytorch_repr, x, constants,
     data = x.clone()
 
     for _ in range(0, iters+1):
-        eval = evaluate(pytorch_repr, x.clone(), constants, final=False)
+        eval = evaluate(pytorch_repr, inputs1, constants, final=False)
         df_dx = grad(outputs=eval.sum(), 
-                        inputs=x, 
+                        inputs=inputs1, 
                         create_graph=True, retain_graph=True, 
-                        allow_unused=False)[0].squeeze().T
+                        materialize_grads=True)[0].squeeze().T
         _dx = -(eval * df_dx) / \
             torch.pow(torch.norm(df_dx, p=2, dim=1), 2).reshape((-1,1))
         dx = torch.add(dx, _dx.T)
-        x = torch.add(x, _dx.T)
+        inputs1 = torch.add(inputs1, _dx.T)
         if torch.abs(_dx).max() < 1e-6:
             break
     
-    eval = evaluate(pytorch_repr, x, constants, final=False)
-    eval[torch.isnan(eval)] = torch.inf
+    eval = evaluate(pytorch_repr, inputs1, constants, final=False)
+    #eval[torch.isnan(eval)] = torch.inf
     df_dx = grad(outputs=eval.sum(), 
                     inputs=inputs1, 
                     create_graph=True, retain_graph=True, 
-                    allow_unused=False)[0].squeeze().T
+                    materialize_grads=True)[0].squeeze().T
     J = torch.sum(torch.pow(torch.norm(dx, p=2, dim=1), 2)) + \
                     torch.abs(constants[:,0,0]).sum()
     dJ_dc = grad(outputs=J, 
                     inputs=inputs2, 
                     create_graph=True, retain_graph=True, 
-                    allow_unused=False)[0].squeeze()
+                    materialize_grads=True)[0].squeeze()
     #print(constants[:,0,0])
     if torch.std(eval) > tol:
         dx *= torch.nan

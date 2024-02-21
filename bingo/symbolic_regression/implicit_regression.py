@@ -20,7 +20,7 @@ from ..evaluation.training_data import TrainingData
 LOGGER = logging.getLogger(__name__)
 
 
-class MLERegression(VectorGradientMixin, VectorBasedFunction):
+class MLERegression(VectorBasedFunction): #VectorGradientMixin):
     """ Implicit Regression via MLE
         Approximation technique derived by Nolan Strauss (M').
     """
@@ -60,6 +60,14 @@ class MLERegression(VectorGradientMixin, VectorBasedFunction):
         f, J, dx, df_dx, dJ_dc = ind.iSMC_pytorch(
                                         self.training_data.x,
                                         )
+        if np.std(f)>self._f_tol: 
+            dx = np.ones_like(dx)*np.nan
+            """
+            Model failed to converge to if the standard deviation of f(X) 
+            is greater than some tolerance.
+
+            Including mean of f as part of fitness
+            """
         if return_all_fitness_metrics:
             return f, J, dx, df_dx, dJ_dc
         return np.power(np.linalg.norm(dx, ord=2, axis=1), 2), dJ_dc

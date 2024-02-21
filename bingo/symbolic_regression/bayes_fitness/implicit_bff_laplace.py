@@ -28,8 +28,8 @@ class ImplicitLaplaceBayesFitnessFunction:
         try:
             individual._needs_opt = True
             p = individual.get_number_local_optimization_params()
+            #import pdb;pdb.set_trace()
             dx, theta_hat, cov = self._perform_MLE(individual)
-
             if np.all(np.isnan(dx)):
                 return np.nan
 
@@ -81,9 +81,9 @@ class ImplicitLaplaceBayesFitnessFunction:
         fit = self._cont_local_opt(ind)
         if np.isnan(fit):
             return np.array([np.nan]), None, None
-        _, dx = \
+        dx, error, ssqe = \
         self._cont_local_opt._fitness_function.evaluate_fitness_vector(ind,
-                return_dx=True)
+                return_all_fitness_metrics=True)
         theta_hat = ind.get_local_optimization_params()
         dx *= (self.training_data.x.shape[1]**0.5) #Heuristic
         n = self._training_data.x.shape[0]

@@ -62,8 +62,11 @@ class Statistics:
     def estimate_covariance(self, individual, subset=None):
         
         self.do_local_opt(individual, subset)
-
-        x, y = self.get_dataset(subset=subset)
+        
+        if subset is not None:
+            x, y = self.get_dataset(subset=subset)
+        else:
+            x, y = self.training_data.x, self.training_data.y
 
         num_params = individual.get_number_local_optimization_params()
         f, f_deriv = individual.evaluate_equation_with_local_opt_gradient_at(x)
