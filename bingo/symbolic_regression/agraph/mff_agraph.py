@@ -90,10 +90,12 @@ def force_use_of_python_simplification():
     USING_PYTHON_SIMPLIFICATION = True
 
 
-class AGraph(Equation):
-    """Acyclic graph representation of an equation.
+class MFFAGraph(Equation):
+    """Multi-Functional Form Acyclic graph representation of an equation.
 
-    `AGraph` is initialized with with empty command array and no constants.
+    evaluates to: y = sum_i f(x, theta_i) * z_i
+
+    `MFFAGraph` is initialized with with empty command array and no constants.
 
     Parameters
     ----------
@@ -114,9 +116,10 @@ class AGraph(Equation):
         numeric constants that are used in the equation
     """
 
-    def __init__(self, use_simplification=False, equation=None):
+    def __init__(self, use_simplification=False, equation=None, z_dims=1):
         super().__init__()
 
+        self._z_dims = z_dims
         self._use_simplification = use_simplification
 
         if use_simplification and not USING_PYTHON_SIMPLIFICATION:
@@ -135,22 +138,24 @@ class AGraph(Equation):
             self._command_array = np.empty([0, 3], dtype=int)
 
             self._simplified_command_array = np.empty([0, 3], dtype=int)
-            self._simplified_constants = []
-
+            self._simplified_constants = np.empty([self._z_dims, 0], dtype=float)
             self._needs_opt = False
             self._modified = False
+
         elif isinstance(equation, (Expr, str)):
             command_array, constants = eq_string_to_command_array_and_constants(
                 str(equation)
             )
 
-            self.set_local_optimization_params(constants)
+            self.set_local_optimization_params(
+                np.repeat([constants], self._z_dims, axis=0)
+            )
             if len(constants) > 0:
                 self._needs_opt = True
 
             self.command_array = command_array
             self._simplified_command_array = command_array
-            self._simplified_constants = constants
+            self._simplified_constants = np.repeat([constants], self._z_dims, axis=0)
 
         else:
             raise TypeError("equation is not in a valid format")
@@ -215,16 +220,16 @@ class AGraph(Equation):
         self._simplified_command_array[const_commands, 2] = np.arange(num_const)
 
         optimization_aggression = 0
-        if optimization_aggression == 0 and num_const <= len(
-            self._simplified_constants
-        ):
-            self._simplified_constants = self._simplified_constants[:num_const]
-        elif optimization_aggression == 1 and num_const == len(
-            self._simplified_constants
-        ):
-            self._simplified_constants = self._simplified_constants[:num_const]
+        if optimization_aggression == 0 and num_const <= \
+            self._simplified_constants.shape[1]:
+            self._simplified_constants = self._simplified_constants[:, :num_const]
+        elif optimization_aggression == 1 and num_const == \
+            self._simplified_constants.shape[1]:
+            self._simplified_constants = self._simplified_constants[:, :num_const]
         else:
-            self._simplified_constants = (1.0,) * num_const
+            self._simplified_constants = np.repeat(
+                [(1.0,) * num_const], self._z_dims, axis=0
+            )
             if num_const > 0:
                 self._needs_opt = True
         self._modified = False
@@ -255,7 +260,7 @@ class AGraph(Equation):
         """
         if self._modified:
             self._update()
-        return len(self._simplified_constants)
+        return self._simplified_constants.size
 
     def set_local_optimization_params(self, params):
         """Set the local optimization parameters.
@@ -267,7 +272,16 @@ class AGraph(Equation):
         params : list of numeric
             Values to set constants
         """
-        self._simplified_constants = tuple(params)
+        if not isinstance(params, np.ndarray):
+            params = np.array(params)
+        if params.ndim != 2:
+            try:
+                params = params.reshape((self._z_dims, -1))
+            except:
+                raise ValueError(
+                    f"Params must be of shape ({self._z_dims}, model_params)."
+                )
+        self._simplified_constants = params
         self._needs_opt = False
 
     def get_local_optimization_params(self):
@@ -279,7 +293,7 @@ class AGraph(Equation):
         -------
         list
         """
-        return list(self._simplified_constants)
+        return self._simplified_constants
 
     def get_utilized_commands(self):
         """Find which commands are utilized.
@@ -294,9 +308,9 @@ class AGraph(Equation):
         """
         return simplification_backend.get_utilized_commands(self._command_array)
 
-    def evaluate_equation_at(self, x):
-        """Evaluate the `AGraph` equation.
-
+    def evaluate_equation_at(self, x, z):
+        """Evaluate the Multi-Functional Form `AGraph` equation.
+        y = sum_i f(x, theta_i) * z_i
         evaluation of the `AGraph` equation at points x.
 
         Parameters
@@ -313,15 +327,31 @@ class AGraph(Equation):
         if self._modified:
             self._update()
         try:
-            f_of_x = evaluation_backend.evaluate(
-                self._simplified_command_array, x, self._simplified_constants
-            )
-            return f_of_x
+            if self._simplified_constants.shape[1] == 0:
+                f_of_x_evals = np.repeat(
+                    evaluation_backend.evaluate(self._simplified_command_array, x, []),
+                    self._z_dims,
+                    axis=1,
+                )
+            else:
+                f_of_x_evals = np.hstack(
+                    [
+                        evaluation_backend.evaluate(
+                            self._simplified_command_array,
+                            x,
+                            self._simplified_constants[i, :],
+                        )
+                        for i in range(self._z_dims)
+                    ]
+                )
+            product_evals = f_of_x_evals * z
+            return np.array(product_evals).sum(axis=1).reshape((-1, 1))
+
         except (ArithmeticError, OverflowError, ValueError, FloatingPointError) as err:
             LOGGER.warning("%s in stack evaluation", err)
             return np.full(x.shape, np.nan)
 
-    def evaluate_equation_with_x_gradient_at(self, x):
+    def evaluate_equation_with_x_gradient_at(self, x, z):
         """Evaluate `AGraph` and get its derivatives.
 
         Evaluate the `AGraph` equation at x and the gradient of x.
@@ -340,16 +370,40 @@ class AGraph(Equation):
         if self._modified:
             self._update()
         try:
-            f_of_x, df_dx = evaluation_backend.evaluate_with_derivative(
-                self._simplified_command_array, x, self._simplified_constants, True
-            )
+            if self._simplified_constants.shape[1] == 0:
+                f_info = np.repeat(
+                    np.expand_dims(
+                        np.hstack(evaluation_backend.evaluate_with_derivative(
+                        self._simplified_command_array, x, [], True)
+                        ), axis=0),
+                    self._z_dims,
+                    axis=0,
+                ).squeeze()
+            else:
+                f_info = np.stack([
+                        np.expand_dims(
+                            np.hstack(evaluation_backend.evaluate_with_derivative(
+                                self._simplified_command_array,
+                                x,
+                                self._simplified_constants[i, :],
+                                True
+                            )), 
+                            axis=0)
+                        for i in range(self._z_dims)
+                    ], axis=0).squeeze()
+            
+            f_of_x = np.sum(f_info[:, :, 0].T * z, axis=1).reshape((-1,1))
+            df_dx = np.sum(f_info[:,:,1:].T * np.expand_dims(z, axis=0), axis=2).T
+
             return f_of_x, df_dx
-        except (ArithmeticError, OverflowError, ValueError, FloatingPointError) as err:
+
+        except (ArithmeticError, OverflowError, ValueError,
+                FloatingPointError) as err:
             LOGGER.warning("%s in stack evaluation/deriv", err)
             nan_array = np.full(x.shape, np.nan)
             return nan_array, np.array(nan_array)
 
-    def evaluate_equation_with_local_opt_gradient_at(self, x):
+    def evaluate_equation_with_local_opt_gradient_at(self, x, z):
         """Evaluate `AGraph` and get its derivatives.
 
         Evaluate the `AGraph` equation at x and get the gradient of constants.
@@ -366,16 +420,35 @@ class AGraph(Equation):
         tuple(Mx1 array of numeric, MxL array of numeric)
             :math:`f(x)` and :math:`df(x)/dc_i`
         """
+        #raise NotImplementedError("Local Opt Gradient Not Implemented for MFF Agraph")
         if self._modified:
             self._update()
+        if self._simplified_constants.shape[1] == 0:
+            return self.evaluate_equation_at(x, z), np.empty([x.shape[0], 0])
+
         try:
-            f_of_x, df_dc = evaluation_backend.evaluate_with_derivative(
-                self._simplified_command_array, x, self._simplified_constants, False
-            )
+            f_info = np.stack([
+                    np.expand_dims(
+                        np.hstack(evaluation_backend.evaluate_with_derivative(
+                            self._simplified_command_array,
+                            x,
+                            self._simplified_constants[i, :],
+                            False
+                        )), 
+                        axis=0)
+                    for i in range(self._z_dims)
+                ], axis=0).squeeze()
+            f_of_x = np.sum(f_info[:, :, 0].T * z, axis=1).reshape((-1,1))
+            df_dc = f_info[:,:,1:] * np.expand_dims(z, axis=0).T
+            df_dc = np.hstack([layer for layer in df_dc])
+
             return f_of_x, df_dc
-        except (ArithmeticError, OverflowError, ValueError, FloatingPointError) as err:
+
+        except (ArithmeticError, OverflowError, ValueError,
+                FloatingPointError) as err:
             LOGGER.warning("%s in stack evaluation/const-deriv", err)
-            nan_array = np.full((x.shape[0], len(self._simplified_constants)), np.nan)
+            nan_array = np.full((x.shape[0], len(self._simplified_constants)),
+                                np.nan)
             return nan_array, np.array(nan_array)
 
     def __str__(self):
@@ -410,8 +483,8 @@ class AGraph(Equation):
         if self._modified:
             self._update()
         return get_formatted_string(
-            format_, self._simplified_command_array, self._simplified_constants
-        )
+            format_, self._simplified_command_array, self._simplified_constants[0,:]
+        ) #Ignoring other parameters for printing convenience!
 
     def get_complexity(self):
         """Calculate complexity of agraph equation.

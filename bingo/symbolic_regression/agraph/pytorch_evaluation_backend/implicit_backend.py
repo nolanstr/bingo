@@ -7,14 +7,14 @@ import numpy as np
 
 import torch
 from torch.autograd import grad
-from  torch.distributions import multivariate_normal
+from torch.distributions import multivariate_normal
 from .operator_eval import forward_eval_function
 from .evaluation_backend import _get_torch_const, evaluate
 
 ENGINE = "Python"
 
-def first_order_optimization(pytorch_repr, x, constants, 
-                                        iters=100, tol=np.inf):
+
+def first_order_optimization(pytorch_repr, x, constants, iters=100, tol=np.inf):
     """Evaluate equation and take derivative wrt x, c, and xc
 
     Parameters
@@ -37,13 +37,12 @@ def first_order_optimization(pytorch_repr, x, constants,
         x = torch.from_numpy(x.T).double()
     constants = _get_torch_const(constants, x.size(1))
     eval, J, dx, df_dx, dJ_dc = execute_first_order_optimization(
-                                        pytorch_repr, x, constants,
-                                        iters=iters, tol=tol)
-    return eval, J, dx, df_dx, dJ_dc 
+        pytorch_repr, x, constants, iters=iters, tol=tol
+    )
+    return eval, J, dx, df_dx, dJ_dc
 
-def execute_first_order_optimization(pytorch_repr, x, constants, 
-                                                iters=100, tol=np.inf):
 
+def execute_first_order_optimization(pytorch_repr, x, constants, iters=100, tol=np.inf):
     inputs1 = x
     inputs2 = constants
     inputs1.requires_grad = True
@@ -54,43 +53,65 @@ def execute_first_order_optimization(pytorch_repr, x, constants,
     dx.requires_grad = True
     data = x.clone()
 
-    for _ in range(0, iters+1):
+    for _ in range(0, iters + 1):
         eval = evaluate(pytorch_repr, inputs1, constants, final=False)
-        df_dx = grad(outputs=eval.sum(), 
-                        inputs=inputs1, 
-                        create_graph=True, retain_graph=True, 
-                        materialize_grads=True)[0].squeeze().T
-        _dx = -(eval * df_dx) / \
-            torch.pow(torch.norm(df_dx, p=2, dim=1), 2).reshape((-1,1))
+        df_dx = (
+            grad(
+                outputs=eval.sum(),
+                inputs=inputs1,
+                create_graph=True,
+                retain_graph=True,
+                materialize_grads=True,
+            )[0]
+            .squeeze()
+            .T
+        )
+        _dx = -(eval * df_dx) / torch.pow(torch.norm(df_dx, p=2, dim=1), 2).reshape(
+            (-1, 1)
+        )
         dx = torch.add(dx, _dx.T)
         inputs1 = torch.add(inputs1, _dx.T)
         if torch.abs(_dx).max() < 1e-6:
             break
-    
+
     eval = evaluate(pytorch_repr, inputs1, constants, final=False)
-    #eval[torch.isnan(eval)] = torch.inf
-    df_dx = grad(outputs=eval.sum(), 
-                    inputs=inputs1, 
-                    create_graph=True, retain_graph=True, 
-                    materialize_grads=True)[0].squeeze().T
-    J = torch.sum(torch.pow(torch.norm(dx, p=2, dim=1), 2)) + \
-                    torch.abs(constants[:,0,0]).sum()
-    dJ_dc = grad(outputs=J, 
-                    inputs=inputs2, 
-                    create_graph=True, retain_graph=True, 
-                    materialize_grads=True)[0].squeeze()
-    #print(constants[:,0,0])
+    # eval[torch.isnan(eval)] = torch.inf
+    df_dx = (
+        grad(
+            outputs=eval.sum(),
+            inputs=inputs1,
+            create_graph=True,
+            retain_graph=True,
+            materialize_grads=True,
+        )[0]
+        .squeeze()
+        .T
+    )
+    J = (
+        torch.sum(torch.pow(torch.norm(dx, p=2, dim=1), 2))
+        + torch.abs(constants[:, 0, 0]).sum()
+    )
+    dJ_dc = grad(
+        outputs=J,
+        inputs=inputs2,
+        create_graph=True,
+        retain_graph=True,
+        materialize_grads=True,
+    )[0].squeeze()
+    # print(constants[:,0,0])
     if torch.std(eval) > tol:
         dx *= torch.nan
         J *= torch.nan
         dJ_dc *= torch.nan
-        
-    #print(constants[:,0,0].detach().numpy(),
-    #        torch.abs(_dx).max().reshape(1).detach().numpy()[0])
-    #print(dJ_dc.sum(axis=1).detach().numpy())
-    #print()
-    return eval.detach().numpy().reshape((n_x, -1)),\
-            J.detach().numpy().reshape(1)[0],\
-            dx.T.detach().numpy(), df_dx.detach().numpy(),\
-            dJ_dc.T.detach().numpy()
 
+    # print(constants[:,0,0].detach().numpy(),
+    #        torch.abs(_dx).max().reshape(1).detach().numpy()[0])
+    # print(dJ_dc.sum(axis=1).detach().numpy())
+    # print()
+    return (
+        eval.detach().numpy().reshape((n_x, -1)),
+        J.detach().numpy().reshape(1)[0],
+        dx.T.detach().numpy(),
+        df_dx.detach().numpy(),
+        dJ_dc.T.detach().numpy(),
+    )

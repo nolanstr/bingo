@@ -6,8 +6,13 @@ form of AGraphs (specified by a command array) to/from computer algebra system
 
 import numpy as np
 
-from ..operator_definitions \
-    import IS_TERMINAL_MAP, IS_ARITY_2_MAP, CONSTANT, INTEGER, VARIABLE
+from ..operator_definitions import (
+    IS_TERMINAL_MAP,
+    IS_ARITY_2_MAP,
+    CONSTANT,
+    INTEGER,
+    VARIABLE,
+)
 from .expression import Expression
 
 
@@ -69,34 +74,31 @@ def build_agraph_stack(expression):
 
 def _build_stack_recursive(expression, stack_dict):
     if expression.operator in [INTEGER, CONSTANT, VARIABLE]:
-        command = (expression.operator, expression.operands[0],
-                   expression.operands[0])
+        command = (expression.operator, expression.operands[0], expression.operands[0])
         return _add_command_to_stack_dict(command, stack_dict)
 
-    operand_locations = [_build_stack_recursive(operand, stack_dict)
-                         for operand in expression.operands]
+    operand_locations = [
+        _build_stack_recursive(operand, stack_dict) for operand in expression.operands
+    ]
 
     if len(operand_locations) == 1:
-        command = (expression.operator, operand_locations[0],
-                   operand_locations[0])
+        command = (expression.operator, operand_locations[0], operand_locations[0])
         return _add_command_to_stack_dict(command, stack_dict)
 
     if len(operand_locations) == 2:
-        command = (expression.operator, operand_locations[0],
-                   operand_locations[1])
+        command = (expression.operator, operand_locations[0], operand_locations[1])
         return _add_command_to_stack_dict(command, stack_dict)
 
-    if not expression.is_constant_valued and \
-            expression.operands[0].is_constant_valued:
-        loc = _add_associative_operators_to_stack(expression.operator,
-                                                  operand_locations[1:],
-                                                  stack_dict)
-        command = (expression.operator, operand_locations[0],
-                   loc)
+    if not expression.is_constant_valued and expression.operands[0].is_constant_valued:
+        loc = _add_associative_operators_to_stack(
+            expression.operator, operand_locations[1:], stack_dict
+        )
+        command = (expression.operator, operand_locations[0], loc)
         return _add_command_to_stack_dict(command, stack_dict)
 
-    return _add_associative_operators_to_stack(expression.operator,
-                                               operand_locations, stack_dict)
+    return _add_associative_operators_to_stack(
+        expression.operator, operand_locations, stack_dict
+    )
 
 
 def _add_command_to_stack_dict(command, stack_dict):
@@ -111,11 +113,11 @@ def _add_associative_operators_to_stack(operator, operand_locs, stack_dict):
     if len(operand_locs) == 1:
         return operand_locs[0]
     operand_div = len(operand_locs) // 2
-    loc_1 = _add_associative_operators_to_stack(operator,
-                                                operand_locs[:operand_div],
-                                                stack_dict)
-    loc_2 = _add_associative_operators_to_stack(operator,
-                                                operand_locs[operand_div:],
-                                                stack_dict)
+    loc_1 = _add_associative_operators_to_stack(
+        operator, operand_locs[:operand_div], stack_dict
+    )
+    loc_2 = _add_associative_operators_to_stack(
+        operator, operand_locs[operand_div:], stack_dict
+    )
     command = (operator, loc_1, loc_2)
     return _add_command_to_stack_dict(command, stack_dict)

@@ -42,8 +42,7 @@ def _reshape_output(output, constants, x):
     if len(constants) > 0:
         if isinstance(constants[0], np.ndarray):
             c_dim = len(constants[0])
-    if isinstance(output, np.ndarray) and \
-            output.shape == (x_dim, c_dim):
+    if isinstance(output, np.ndarray) and output.shape == (x_dim, c_dim):
         return output
     return np.ones((x_dim, c_dim)) * output
 
@@ -78,15 +77,15 @@ def evaluate_with_derivative(stack, x, constants, wrt_param_x_or_c):
 
 def _forward_eval(stack, x, constants):
     # np.empty((stack.shape[0], x.shape[0]))
-    forward_eval = [None]*stack.shape[0]
+    forward_eval = [None] * stack.shape[0]
     for i, (node, param1, param2) in enumerate(stack):
-        forward_eval[i] = forward_eval_function(node, param1, param2, x,
-                                                constants, forward_eval)
+        forward_eval[i] = forward_eval_function(
+            node, param1, param2, x, constants, forward_eval
+        )
     return forward_eval
 
 
 def _evaluate_with_derivative(stack, x, constants, wrt_param_x_or_c):
-
     forward_eval = _forward_eval(stack, x, constants)
 
     if wrt_param_x_or_c:  # x
@@ -96,8 +95,7 @@ def _evaluate_with_derivative(stack, x, constants, wrt_param_x_or_c):
         deriv_shape = (x.shape[0], len(constants))
         deriv_wrt_node = 1
 
-    derivative = _reverse_eval(deriv_shape, deriv_wrt_node, forward_eval,
-                               stack)
+    derivative = _reverse_eval(deriv_shape, deriv_wrt_node, forward_eval, stack)
 
     return _reshape_output(forward_eval[-1], constants, x), derivative
 
@@ -109,15 +107,15 @@ def _reverse_eval(deriv_shape, deriv_wrt_node, forward_eval, stack):
     for i in range(stack.shape[0] - 1, -1, -1):
         node, param1, param2 = stack[i]
         if node == deriv_wrt_node:
-            derivative[:, param1] += _reshape_reverse_eval(reverse_eval[i],
-                                                           deriv_shape[0])
+            derivative[:, param1] += _reshape_reverse_eval(
+                reverse_eval[i], deriv_shape[0]
+            )
         else:
-            reverse_eval_function(node, i, param1, param2, forward_eval,
-                                  reverse_eval)
+            reverse_eval_function(node, i, param1, param2, forward_eval, reverse_eval)
     return derivative
 
 
 def _reshape_reverse_eval(r_eval, new_size):
     if isinstance(r_eval, np.ndarray):
-        return r_eval.reshape((new_size, ))
+        return r_eval.reshape((new_size,))
     return r_eval

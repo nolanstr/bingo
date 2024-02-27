@@ -2,8 +2,14 @@
 Definition of a mathematical expression in tree form that can be used for
 simplification tasks.
 """
-from ..operator_definitions \
-    import POWER, INTEGER, MULTIPLICATION, CONSTANT, VARIABLE, ADDITION
+from ..operator_definitions import (
+    POWER,
+    INTEGER,
+    MULTIPLICATION,
+    CONSTANT,
+    VARIABLE,
+    ADDITION,
+)
 
 
 class Expression:
@@ -16,6 +22,7 @@ class Expression:
     operands: list of `Expression` or int
         The operands upon which the operator in the expression acts.
     """
+
     def __init__(self, operator, operands):
         self._operator = operator
         self._operands = operands
@@ -63,7 +70,12 @@ class Expression:
             return self._operands[1]
         if self._operator == INTEGER:
             return None
-        return Expression(INTEGER, [1, ])
+        return Expression(
+            INTEGER,
+            [
+                1,
+            ],
+        )
 
     @property
     def term(self):
@@ -75,17 +87,29 @@ class Expression:
 
         if self._operator == INTEGER:
             return None
-        return Expression(MULTIPLICATION, [self, ])
+        return Expression(
+            MULTIPLICATION,
+            [
+                self,
+            ],
+        )
 
     @property
     def coefficient(self):
         """The coefficient A in A*x"""
-        if self._operator == MULTIPLICATION and \
-                self._operands[0].operator in [INTEGER, CONSTANT]:
+        if self._operator == MULTIPLICATION and self._operands[0].operator in [
+            INTEGER,
+            CONSTANT,
+        ]:
             return self._operands[0]
         if self._operator == INTEGER:
             return None
-        return Expression(INTEGER, [1, ])
+        return Expression(
+            INTEGER,
+            [
+                1,
+            ],
+        )
 
     def _is_derived_from_constants(self):
         if self._operator in [INTEGER, CONSTANT]:
@@ -111,7 +135,7 @@ class Expression:
         return set.union(*[o.depends_on for o in self._operands])
 
     def map(self, mapped_function):
-        """ Apply a function to all operands of an expression
+        """Apply a function to all operands of an expression
 
         Parameters
         ----------
@@ -174,8 +198,7 @@ class Expression:
 
     @staticmethod
     def _operands_lt(s_operands, o_operands):
-        for s_operand, o_operand in zip(reversed(s_operands),
-                                        reversed(o_operands)):
+        for s_operand, o_operand in zip(reversed(s_operands), reversed(o_operands)):
             if s_operand != o_operand:
                 return s_operand < o_operand
         return len(s_operands) < len(o_operands)
@@ -183,10 +206,19 @@ class Expression:
     def _associative_lt(self, other, associative_operator):
         if self._operator == associative_operator:
             if other.operator == associative_operator:
-                return self._operands_lt(self._operands,
-                                         other.operands)
-            return self._operands_lt(self._operands, [other, ])
-        return self._operands_lt([self, ], other.operands)
+                return self._operands_lt(self._operands, other.operands)
+            return self._operands_lt(
+                self._operands,
+                [
+                    other,
+                ],
+            )
+        return self._operands_lt(
+            [
+                self,
+            ],
+            other.operands,
+        )
 
     def _power_lt(self, other):
         if self._operator == POWER:
@@ -223,6 +255,7 @@ class Expression:
 
     def __hash__(self):
         if self._hash is None:
-            self._hash = hash((self._operator,) +
-                              tuple(hash(i) for i in self._operands))
+            self._hash = hash(
+                (self._operator,) + tuple(hash(i) for i in self._operands)
+            )
         return self._hash

@@ -6,8 +6,7 @@ expression
 from collections import defaultdict
 from itertools import combinations
 
-from ..operator_definitions \
-    import CONSTANT, INTEGER, VARIABLE, MULTIPLICATION, ADDITION
+from ..operator_definitions import CONSTANT, INTEGER, VARIABLE, MULTIPLICATION, ADDITION
 from .expression import Expression
 
 
@@ -34,12 +33,11 @@ def fold_constants(expression):
         constants = _get_constants(expression)
         for const_subset in _subsets(list(constants)):
             insertion_points = _find_insertion_points(expression, const_subset)
-            replacements = _generate_replacement_instructions(const_subset,
-                                                              constants,
-                                                              insertion_points)
+            replacements = _generate_replacement_instructions(
+                const_subset, constants, insertion_points
+            )
             if len(replacements) > 0:
-                expression = _perform_constant_folding(expression,
-                                                       replacements)
+                expression = _perform_constant_folding(expression, replacements)
                 check_for_folding = True
                 break
 
@@ -50,34 +48,32 @@ def _group_constants(expression):
     if expression.operator in [CONSTANT, INTEGER, VARIABLE]:
         return expression
 
-    new_operands = [_group_constants(operand)
-                    for operand in expression.operands]
+    new_operands = [_group_constants(operand) for operand in expression.operands]
 
     if expression.operator in [MULTIPLICATION, ADDITION]:
-        const_operands = [operand for operand in new_operands
-                          if operand.is_constant_valued]
-        non_const_operands = [operand for operand in new_operands
-                              if not operand.is_constant_valued]
+        const_operands = [
+            operand for operand in new_operands if operand.is_constant_valued
+        ]
+        non_const_operands = [
+            operand for operand in new_operands if not operand.is_constant_valued
+        ]
         if len(const_operands) > 1 and len(non_const_operands) > 0:
             const_expr = Expression(expression.operator, const_operands)
-            return Expression(expression.operator,
-                              [const_expr] + non_const_operands)
+            return Expression(expression.operator, [const_expr] + non_const_operands)
 
     return Expression(expression.operator, new_operands)
 
 
-def _generate_replacement_instructions(const_subset, constants,
-                                       insertion_points):
+def _generate_replacement_instructions(const_subset, constants, insertion_points):
     if len(insertion_points) > len(const_subset):
         return {}
 
     replacements = defaultdict(dict)
     constants_to_insert = set()
     expressions_to_replace = set()
-    for const_num, (_, insertions) in zip(const_subset,
-                                          insertion_points.items()):
+    for const_num, (_, insertions) in zip(const_subset, insertion_points.items()):
         const_to_insert = constants[const_num]
-        for (parent, children) in insertions:
+        for parent, children in insertions:
             for i, child in enumerate(children):
                 expressions_to_replace.add(child)
                 if i == 0:
@@ -112,24 +108,27 @@ def _subsets(constants):
 
 
 def _find_insertion_points(expression, constants):
-    if not expression.depends_on.isdisjoint(constants) and \
-            len(expression.depends_on - constants - {"i"}) == 0:
+    if (
+        not expression.depends_on.isdisjoint(constants)
+        and len(expression.depends_on - constants - {"i"}) == 0
+    ):
         return {expression: [(None, frozenset([expression]))]}
 
     insertion_points = defaultdict(set)
-    _recursive_insertion_point_search(expression, constants, insertion_points,
-                                      parent=None)
+    _recursive_insertion_point_search(
+        expression, constants, insertion_points, parent=None
+    )
     return insertion_points
 
 
-def _recursive_insertion_point_search(expression, constants, insertion_points,
-                                      parent):
+def _recursive_insertion_point_search(expression, constants, insertion_points, parent):
     if expression.operator in [CONSTANT, INTEGER, VARIABLE]:
         return
 
     for operand in expression.operands:
-        _recursive_insertion_point_search(operand, constants, insertion_points,
-                                          expression)
+        _recursive_insertion_point_search(
+            operand, constants, insertion_points, expression
+        )
 
     if not _is_insertion_point_for_constants(expression, constants):
         return
@@ -137,9 +136,13 @@ def _recursive_insertion_point_search(expression, constants, insertion_points,
     if expression.is_constant_valued:
         insertion_points[expression].add((parent, frozenset([expression])))
     else:
-        constant_operands = \
-            frozenset([operand for operand in expression.operands
-                       if len(operand.depends_on - constants - {"i"}) == 0])
+        constant_operands = frozenset(
+            [
+                operand
+                for operand in expression.operands
+                if len(operand.depends_on - constants - {"i"}) == 0
+            ]
+        )
         insertion_points[expression].add((expression, constant_operands))
 
     return
@@ -166,10 +169,8 @@ def _recursive_expreson_replacement(expression, replacements):
     if expression not in replacements:
         if expression.operator in [CONSTANT, INTEGER, VARIABLE]:
             return expression
-        return expression.map(lambda x:
-                              _perform_constant_folding(x, replacements))
-    new_operands = _get_new_operands_with_replacements(expression,
-                                                       replacements)
+        return expression.map(lambda x: _perform_constant_folding(x, replacements))
+    new_operands = _get_new_operands_with_replacements(expression, replacements)
     return Expression(expression.operator, new_operands)
 
 
@@ -182,6 +183,5 @@ def _get_new_operands_with_replacements(expression, replacements):
             if operand_replacement is not None:
                 new_operands.append(operand_replacement.copy())
         else:
-            new_operands.append(_perform_constant_folding(operand,
-                                                          replacements))
+            new_operands.append(_perform_constant_folding(operand, replacements))
     return new_operands

@@ -13,8 +13,15 @@ REPLACE_INTEGER_POWERS: Default True.
 REPLACE_INTEGERS_WITH_CONSTANTS: Default False
     x+x is simplified to 2*x and is converted to c*x
 """
-from ..operator_definitions import INTEGER, CONSTANT, VARIABLE, ADDITION, \
-                                   MULTIPLICATION, SUBTRACTION, POWER
+from ..operator_definitions import (
+    INTEGER,
+    CONSTANT,
+    VARIABLE,
+    ADDITION,
+    MULTIPLICATION,
+    SUBTRACTION,
+    POWER,
+)
 from .expression import Expression
 
 INSERT_SUBTRACTION = True
@@ -60,8 +67,9 @@ def _insert_subtraction(expression):
     if operator in [INTEGER, CONSTANT, VARIABLE]:
         return expression
 
-    operands_w_subtraction = [_insert_subtraction(operand)
-                              for operand in expression.operands]
+    operands_w_subtraction = [
+        _insert_subtraction(operand) for operand in expression.operands
+    ]
     if operator != ADDITION:
         return Expression(operator, operands_w_subtraction)
 
@@ -81,9 +89,10 @@ def _insert_subtraction(expression):
         return Expression(ADDITION, additive_operands)
 
     if len(additive_operands) == 0:
-        return Expression(MULTIPLICATION, [NEGATIVE_ONE.copy(),
-                                           Expression(ADDITION,
-                                                      subtractive_operands)])
+        return Expression(
+            MULTIPLICATION,
+            [NEGATIVE_ONE.copy(), Expression(ADDITION, subtractive_operands)],
+        )
 
     if len(subtractive_operands) == 1:
         subtractive_exp = subtractive_operands[0]
@@ -103,11 +112,15 @@ def _replace_integer_powers(expression):
     if operator in [INTEGER, CONSTANT, VARIABLE]:
         return expression
 
-    operands_w_replaced = [_replace_integer_powers(operand)
-                           for operand in expression.operands]
+    operands_w_replaced = [
+        _replace_integer_powers(operand) for operand in expression.operands
+    ]
 
-    if operator != POWER or operands_w_replaced[1].operator != INTEGER \
-            or operands_w_replaced[1].operands[0] <= 0:
+    if (
+        operator != POWER
+        or operands_w_replaced[1].operator != INTEGER
+        or operands_w_replaced[1].operands[0] <= 0
+    ):
         return Expression(operator, operands_w_replaced)
 
     power = operands_w_replaced[1].operands[0]
@@ -121,6 +134,7 @@ def _replace_integers_with_constants(expression):
     if operator == INTEGER:
         return Expression(CONSTANT, [SOME_BIG_INT + expression.operands[0]])
 
-    operands_w_replaced = [_replace_integers_with_constants(operand)
-                           for operand in expression.operands]
+    operands_w_replaced = [
+        _replace_integers_with_constants(operand) for operand in expression.operands
+    ]
     return Expression(operator, operands_w_replaced)

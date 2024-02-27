@@ -15,7 +15,11 @@ ENGINE = "Python"
 def _get_torch_const(constants, data_len):
     with torch.no_grad():
         # assumes simplified constants are up to date
-        if isinstance(constants, tuple) and len(constants) > 0 and isinstance(constants[0], np.ndarray):
+        if (
+            isinstance(constants, tuple)
+            and len(constants) > 0
+            and isinstance(constants[0], np.ndarray)
+        ):
             constants = np.array(constants)
 
         try:
@@ -38,9 +42,8 @@ def get_pytorch_repr(command_array):
     def get_expr(X, constants):  # assumes X is column-order
         expr = []
 
-        for (node, param1, param2) in command_array:
-            expr.append(forward_eval_function(node, param1, param2, X, constants,
-                                              expr))
+        for node, param1, param2 in command_array:
+            expr.append(forward_eval_function(node, param1, param2, X, constants, expr))
 
         return expr[-1]
 
@@ -100,7 +103,9 @@ def evaluate_with_derivative(pytorch_repr, x, constants, wrt_param_x_or_c):
     if isinstance(x, np.ndarray):
         x = torch.from_numpy(x.T).double()
     constants = _get_torch_const(constants, x.size(1))
-    eval, deriv = _evaluate_with_derivative(pytorch_repr, x, constants, wrt_param_x_or_c)
+    eval, deriv = _evaluate_with_derivative(
+        pytorch_repr, x, constants, wrt_param_x_or_c
+    )
     return eval, deriv
 
 
@@ -113,14 +118,24 @@ def _evaluate_with_derivative(pytorch_repr, x, constants, wrt_param_x_or_c):
     eval = evaluate(pytorch_repr, x, constants, final=False)
 
     if eval.requires_grad:
-        derivative = grad(outputs=eval.sum(), inputs=inputs, create_graph=True, retain_graph=True, allow_unused=False)[0]
+        derivative = grad(
+            outputs=eval.sum(),
+            inputs=inputs,
+            create_graph=True,
+            retain_graph=True,
+            allow_unused=False,
+        )[0]
     else:
         derivative = None
     if derivative is None:
         derivative = torch.zeros((inputs.shape[0], eval.shape[0]))
     elif not wrt_param_x_or_c:
         derivative = derivative[:, :, 0]
-    return _reshape_output(eval.detach().numpy(), constants, x), derivative.T.detach().numpy()
+    return (
+        _reshape_output(eval.detach().numpy(), constants, x),
+        derivative.T.detach().numpy(),
+    )
+
 
 def evaluate_with_both_derivatives(pytorch_repr, x, constants):
     """Evaluate equation and take derivative wrt x, c, and xc
@@ -145,8 +160,10 @@ def evaluate_with_both_derivatives(pytorch_repr, x, constants):
         x = torch.from_numpy(x.T).double()
     constants = _get_torch_const(constants, x.size(1))
     eval, deriv_1, deriv_2, deriv_3 = _evaluate_with_both_derivatives(
-                    pytorch_repr, x, constants)
+        pytorch_repr, x, constants
+    )
     return eval, deriv_1, deriv_2, deriv_3
+
 
 def _evaluate_with_both_derivatives(pytorch_repr, x, constants):
     """
@@ -164,24 +181,36 @@ def _evaluate_with_both_derivatives(pytorch_repr, x, constants):
     eval = evaluate(pytorch_repr, x, constants, final=False)
 
     if eval.requires_grad:
-        deriv_1 = grad(outputs=eval.sum(), 
-                        inputs=inputs1, 
-                        create_graph=True, retain_graph=True, 
-                        allow_unused=False)[0]
-        deriv_2 = grad(outputs=eval.sum(), 
-                        inputs=inputs2, 
-                        create_graph=True, retain_graph=True, 
-                        allow_unused=False)[0].squeeze()
+        deriv_1 = grad(
+            outputs=eval.sum(),
+            inputs=inputs1,
+            create_graph=True,
+            retain_graph=True,
+            allow_unused=False,
+        )[0]
+        deriv_2 = grad(
+            outputs=eval.sum(),
+            inputs=inputs2,
+            create_graph=True,
+            retain_graph=True,
+            allow_unused=False,
+        )[0].squeeze()
         deriv_3 = torch.zeros((x_dim, c_dim, n_x))
         for i in range(x_dim):
-            deriv_3[i,:,:] = grad(outputs=deriv_1[i,:].sum(), 
-                                  inputs=inputs2, 
-                                  create_graph=True, 
-                                  retain_graph=True, 
-                                  allow_unused=False)[0].squeeze()
-    return eval.detach().numpy().reshape((n_x, -1)),\
-            deriv_1.T.detach().numpy(), deriv_2.T.detach().numpy(),\
-            deriv_3.detach().numpy()
+            deriv_3[i, :, :] = grad(
+                outputs=deriv_1[i, :].sum(),
+                inputs=inputs2,
+                create_graph=True,
+                retain_graph=True,
+                allow_unused=False,
+            )[0].squeeze()
+    return (
+        eval.detach().numpy().reshape((n_x, -1)),
+        deriv_1.T.detach().numpy(),
+        deriv_2.T.detach().numpy(),
+        deriv_3.detach().numpy(),
+    )
+
 
 def evaluate_iSMC_dJ_dc(pytorch_repr, x, constants):
     """Evaluate equation and take derivative wrt x, c, and xc
@@ -205,9 +234,9 @@ def evaluate_iSMC_dJ_dc(pytorch_repr, x, constants):
     if isinstance(x, np.ndarray):
         x = torch.from_numpy(x.T).double()
     constants = _get_torch_const(constants, x.size(1))
-    eval, J, dJ_dc = _evaluate_iSMC_dJ_dc(
-                    pytorch_repr, x, constants)
-    return eval, J, dJ_dc 
+    eval, J, dJ_dc = _evaluate_iSMC_dJ_dc(pytorch_repr, x, constants)
+    return eval, J, dJ_dc
+
 
 def _evaluate_iSMC_dJ_dc(pytorch_repr, x, constants):
     inputs1 = x
@@ -220,19 +249,27 @@ def _evaluate_iSMC_dJ_dc(pytorch_repr, x, constants):
     eval = evaluate(pytorch_repr, x, constants, final=False)
 
     if eval.requires_grad:
-        df_dx = grad(outputs=eval.sum(), 
-                        inputs=inputs1, 
-                        create_graph=True, retain_graph=True, 
-                        allow_unused=False)[0]
-        J = torch.pow(eval, 2) / \
-            torch.pow(torch.norm(df_dx, dim=0).reshape((-1,1)), 2)
-        dJ_dc = grad(outputs=J.sum(), 
-                        inputs=inputs2, 
-                        create_graph=True, retain_graph=True, 
-                        allow_unused=False)[0].squeeze()
-    return eval.detach().numpy().reshape((n_x, -1)),\
-            J.detach().numpy().reshape((n_x, -1)),\
-            dJ_dc.T.detach().numpy()
+        df_dx = grad(
+            outputs=eval.sum(),
+            inputs=inputs1,
+            create_graph=True,
+            retain_graph=True,
+            allow_unused=False,
+        )[0]
+        J = torch.pow(eval, 2) / torch.pow(torch.norm(df_dx, dim=0).reshape((-1, 1)), 2)
+        dJ_dc = grad(
+            outputs=J.sum(),
+            inputs=inputs2,
+            create_graph=True,
+            retain_graph=True,
+            allow_unused=False,
+        )[0].squeeze()
+    return (
+        eval.detach().numpy().reshape((n_x, -1)),
+        J.detach().numpy().reshape((n_x, -1)),
+        dJ_dc.T.detach().numpy(),
+    )
+
 
 def evaluate_with_partials(pytorch_repr, x, constants, partial_order):
     if isinstance(x, np.ndarray):
@@ -251,9 +288,9 @@ def evaluate_with_partials(pytorch_repr, x, constants, partial_order):
     partials = []
     for variable in partial_order:
         try:
-            partial = grad(outputs=partial.sum(), inputs=x,
-                         allow_unused=True,
-                         create_graph=True)[0][variable]
+            partial = grad(
+                outputs=partial.sum(), inputs=x, allow_unused=True, create_graph=True
+            )[0][variable]
             if partial is None:
                 partial = torch.zeros_like(x[0])
         except (IndexError, RuntimeError):

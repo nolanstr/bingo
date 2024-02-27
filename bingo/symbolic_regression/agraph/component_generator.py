@@ -38,50 +38,60 @@ class ComponentGenerator:
     input_x_dimension : int
         number of independent variables
     """
-    @argument_validation(input_x_dimension={">=": 0},
-                         num_initial_load_statements={">=": 1},
-                         terminal_probability={">=": 0.0, "<=": 1.0},
-                         operator_probability={">=": 0.0, "<=": 1.0},
-                         equation_probability={">=": 0.0, "<=": 1.0},
-                         constant_probability={">=": 0.0, "<=": 1.0})
-    def __init__(self, input_x_dimension, num_initial_load_statements=1,
-                 terminal_probability=0.1,
-                 operator_probability=0.9,
-                 equation_probability=0.0,
-                 constant_probability=None):
 
+    @argument_validation(
+        input_x_dimension={">=": 0},
+        num_initial_load_statements={">=": 1},
+        terminal_probability={">=": 0.0, "<=": 1.0},
+        operator_probability={">=": 0.0, "<=": 1.0},
+        equation_probability={">=": 0.0, "<=": 1.0},
+        constant_probability={">=": 0.0, "<=": 1.0},
+    )
+    def __init__(
+        self,
+        input_x_dimension,
+        num_initial_load_statements=1,
+        terminal_probability=0.1,
+        operator_probability=0.9,
+        equation_probability=0.0,
+        constant_probability=None,
+    ):
         self.input_x_dimension = input_x_dimension
         self._num_initial_load_statements = num_initial_load_statements
 
         self._terminal_pmf = self._make_terminal_pdf(constant_probability)
         self._operator_pmf = ProbabilityMassFunction()
         self._equation_pmf = ProbabilityMassFunction()
-        self._full_random_command_function_pmf = \
-            self._make_random_command_pmf(terminal_probability,
-                                          operator_probability,
-                                          equation_probability)
-        self._random_command_function_pmf = \
-            self._make_random_command_pmf(terminal_probability,
-                                          operator_probability,
-                                          0)
+        self._full_random_command_function_pmf = self._make_random_command_pmf(
+            terminal_probability, operator_probability, equation_probability
+        )
+        self._random_command_function_pmf = self._make_random_command_pmf(
+            terminal_probability, operator_probability, 0
+        )
 
     def _make_terminal_pdf(self, constant_probability):
         if constant_probability is None:
             terminal_weight = [1, self.input_x_dimension]
         else:
-            terminal_weight = [constant_probability,
-                               1.0 - constant_probability]
+            terminal_weight = [constant_probability, 1.0 - constant_probability]
         return ProbabilityMassFunction(items=[1, 0], weights=terminal_weight)
 
-    def _make_random_command_pmf(self, terminal_probability,
-                                 operator_probability, equation_probability):
-        command_weights = [terminal_probability,
-                           operator_probability,
-                           equation_probability]
-        return ProbabilityMassFunction(items=[self.random_terminal_command,
-                                              self.random_operator_command,
-                                              self.random_equation],
-                                       weights=command_weights)
+    def _make_random_command_pmf(
+        self, terminal_probability, operator_probability, equation_probability
+    ):
+        command_weights = [
+            terminal_probability,
+            operator_probability,
+            equation_probability,
+        ]
+        return ProbabilityMassFunction(
+            items=[
+                self.random_terminal_command,
+                self.random_operator_command,
+                self.random_equation,
+            ],
+            weights=command_weights,
+        )
 
     def add_operator(self, operator_to_add, operator_weight=None):
         """Add an operator number to the set of possible operators
@@ -95,8 +105,7 @@ class ComponentGenerator:
                           relative weight of operator probability
         """
         if isinstance(operator_to_add, str):
-            operator_number = self._get_operator_number_from_string(
-                operator_to_add)
+            operator_number = self._get_operator_number_from_string(operator_to_add)
         else:
             operator_number = operator_to_add
 
@@ -115,10 +124,10 @@ class ComponentGenerator:
         """
 
         # string or sympy expression, need to turn into a command array
-        if isinstance(equation_to_add, str) \
-                or isinstance(equation_to_add, Expr):
-            equation_to_add, _ = \
-                eq_string_to_command_array_and_constants(str(equation_to_add))
+        if isinstance(equation_to_add, str) or isinstance(equation_to_add, Expr):
+            equation_to_add, _ = eq_string_to_command_array_and_constants(
+                str(equation_to_add)
+            )
 
         self._equation_pmf.add_item(equation_to_add, equation_weight)
 
@@ -173,7 +182,6 @@ class ComponentGenerator:
             command = np.array([command])
         return command
 
-
     def random_operator_command(self, stack_location):
         """Get a random operator (non-terminal) command
 
@@ -188,10 +196,14 @@ class ComponentGenerator:
             a random command in the form [node, parameter 1, parameter 2]
 
         """
-        return np.array([self.random_operator(),
-                         self.random_operator_parameter(stack_location),
-                         self.random_operator_parameter(stack_location)],
-                        dtype=int)
+        return np.array(
+            [
+                self.random_operator(),
+                self.random_operator_parameter(stack_location),
+                self.random_operator_parameter(stack_location),
+            ],
+            dtype=int,
+        )
 
     def random_operator(self):
         """Get a random operator
@@ -276,13 +288,14 @@ class ComponentGenerator:
         """Shift indices of command array to start at
         stack_location instead of 0"""
         new_cmd_arr = deepcopy(cmd_arr)
-        operator_idx = np.logical_and.reduce((new_cmd_arr[:, 0] != -1,
-                                              new_cmd_arr[:, 0] != 0,
-                                              new_cmd_arr[:, 0] != 1))
-    
+        operator_idx = np.logical_and.reduce(
+            (new_cmd_arr[:, 0] != -1, new_cmd_arr[:, 0] != 0, new_cmd_arr[:, 0] != 1)
+        )
+
         # add stack_location to the params of operator commands
-        new_cmd_arr[operator_idx] = new_cmd_arr[operator_idx] + \
-                                np.array([0, stack_location, stack_location])
+        new_cmd_arr[operator_idx] = new_cmd_arr[operator_idx] + np.array(
+            [0, stack_location, stack_location]
+        )
         return new_cmd_arr
 
     def random_equation(self, stack_location):

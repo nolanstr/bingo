@@ -30,7 +30,7 @@ def get_utilized_commands(stack):
     list of bool of length N
         Boolean values for whether each command is utilized.
     """
-    util = [False]*stack.shape[0]
+    util = [False] * stack.shape[0]
     util[-1] = True
     for i in range(1, stack.shape[0]):
         node, param1, param2 = stack[-i]

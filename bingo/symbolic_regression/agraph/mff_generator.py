@@ -13,14 +13,14 @@ except (ImportError, KeyError, ModuleNotFoundError) as e:
     from .agraph import AGraph
 
     BINGOCPP = False
-from .agraph import AGraph as pyAGraph
+from .mff_agraph import MFFAGraph as pyAGraph
 from .agraph import force_use_of_python_simplification
 from .pytorch_agraph import PytorchAGraph as torchAGraph
 from ...chromosomes.generator import Generator
 from ...util.argument_validation import argument_validation
 
 
-class AGraphGenerator(Generator):
+class MFFAGraphGenerator(Generator):
     """Generates acyclic graph individuals
 
     Parameters
@@ -39,7 +39,12 @@ class AGraphGenerator(Generator):
         use_python=False,
         use_simplification=False,
         use_pytorch=False,
+        z_dims=1,
     ):
+        self._z_dims = z_dims
+
+        if use_pytorch:
+            raise NotImplementedError("Pytorch Agraph Not Supported for MFF.")
         self.agraph_size = agraph_size
         self.component_generator = component_generator
         self._use_simplification = use_simplification
@@ -68,12 +73,16 @@ class AGraphGenerator(Generator):
         return individual
 
     def _python_generator_function(self):
-        return pyAGraph(use_simplification=self._use_simplification)
+        return pyAGraph(
+            use_simplification=self._use_simplification, z_dims=self._z_dims
+        )
 
     def _pytorch_generator_function(self):
+        raise NotImplementedError("Pytorch Agraph Not Supported for MFF.")
         return torchAGraph(use_simplification=self._use_simplification)
 
     def _generator_function(self):
+        raise NotImplementedError("CPP Agraph Not Supported for MFF.")
         return AGraph(use_simplification=self._use_simplification)
 
     def _create_command_array(self):
