@@ -77,6 +77,27 @@ class BayesFitnessFunction(FitnessFunction, Utilities, Statistics):
         individual.set_local_optimization_params(params.T)
         return individual.evaluate_equation_at(self.x_subset).T
 
+    def estimate_covariance(self, individual, subset=None):
+
+        self.do_local_opt(individual, subset)
+        x = self.training_data.x
+        y = self.training_data.y
+        z = self.training_data.z
+
+        num_params = individual.get_number_local_optimization_params()
+        f, f_deriv = individual.evaluate_equation_with_local_opt_gradient_at(x,
+                z)
+        
+        ssqe = np.sum((f - y) ** 2)
+        var_ols = ssqe / len(f)
+        try:
+            cov = var_ols * np.linalg.inv(f_deriv.T.dot(f_deriv))
+        except:
+            cov = var_ols * np.linalg.pinv(f_deriv.T.dot(f_deriv))
+            
+        return individual.constants, cov, var_ols, ssqe#, noise_std_dev
+
+
     @property
     def eval_count(self):
         return self._eval_count + self._cont_local_opt.eval_count

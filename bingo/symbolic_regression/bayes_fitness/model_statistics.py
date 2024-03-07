@@ -60,7 +60,7 @@ class Statistics:
         return noise_pdf, np.sqrt(noise_samples)
 
     def estimate_covariance(self, individual, subset=None):
-        
+
         self.do_local_opt(individual, subset)
         
         if subset is not None:
