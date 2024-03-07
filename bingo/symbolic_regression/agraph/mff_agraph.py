@@ -220,6 +220,10 @@ class MFFAGraph(Equation):
         self._simplified_command_array[const_commands, 2] = np.arange(num_const)
 
         optimization_aggression = 0
+
+        if isinstance(self._simplified_constants, tuple):
+            self._simplified_constants = np.array(self._simplified_constants)
+
         if optimization_aggression == 0 and num_const <= \
             self._simplified_constants.shape[1]:
             self._simplified_constants = self._simplified_constants[:, :num_const]
@@ -519,6 +523,7 @@ class MFFAGraph(Equation):
     def __deepcopy__(self, memodict=None):
         duplicate = self.__class__()
         self._copy_agraph_values_to_new_graph(duplicate)
+        duplicate._z_dims = self._z_dims
         return duplicate
 
     def _copy_agraph_values_to_new_graph(self, agraph_duplicate):
