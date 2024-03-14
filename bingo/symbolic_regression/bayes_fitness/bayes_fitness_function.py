@@ -95,6 +95,7 @@ class BayesFitnessFunction(FitnessFunction, Utilities, Priors, RandomSample,
         mcmc_kernel = VectorMCMCKernel(vector_mcmc, param_order=param_names)
         smc = AdaptiveSampler(mcmc_kernel)
         try:
+            #import pdb;pdb.set_trace()
             step_list, marginal_log_likes = \
                 smc.sample(self._num_particles, self._mcmc_steps,
                            self._ess_threshold,
