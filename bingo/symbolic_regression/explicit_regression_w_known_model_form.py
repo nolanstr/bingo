@@ -50,7 +50,8 @@ class ExplicitRegression(VectorGradientMixin, VectorBasedFunction):
         super().__init__(training_data, metric)
         self._relative = relative
         self.known_model_form = known_model_form
-    
+        self.generate_known_model_graph()
+
     def implement_known_model_form(self, individual):
 
         constants = individual.constants
@@ -64,6 +65,9 @@ class ExplicitRegression(VectorGradientMixin, VectorBasedFunction):
         individual.set_local_optimization_params(constants)
         
         return known_model
+
+    def generate_known_model_graph(self):
+        self.known_model = AGraph(equation=self.known_model_form)
 
     def evaluate_fitness_vector(self, individual):
         """ Traditional fitness evaluation for symbolic regression
@@ -83,9 +87,9 @@ class ExplicitRegression(VectorGradientMixin, VectorBasedFunction):
             the fitness of the input Equation individual
         """
         self.eval_count += 1
-        known_model = self.implement_known_model_form(individual)
-        
-        f_of_x = known_model.evaluate_equation_at(self.training_data.x)
+        #known_model = self.implement_known_model_form(individual)
+        km_eval = self.known_model.evaluate_equation_at(self.training_data.x)
+        f_of_x = km_eval * individual.evaluate_equation_at(self.training_data.x)
         error = f_of_x - self.training_data.y
         if not self._relative:
             return np.squeeze(error)
@@ -119,11 +123,15 @@ class ExplicitRegression(VectorGradientMixin, VectorBasedFunction):
             to the individual's constants
         """
         self.eval_count += 1
-        known_model = self.implement_known_model_form(individual)
+        km_eval = self.known_model.evaluate_equation_at(self.training_data.x)
+        #known_model = self.implement_known_model_form(individual)
         f_of_x, df_dc = \
-            known_model.evaluate_equation_with_local_opt_gradient_at(
+            individual.evaluate_equation_with_local_opt_gradient_at(
                     self.training_data.x)
+        f_of_x *= km_eval
+        df_dc *= km_eval
         error = f_of_x - self.training_data.y
+
         if not self._relative:
             return np.squeeze(error), df_dc
         return np.squeeze(error / self.training_data.y), \

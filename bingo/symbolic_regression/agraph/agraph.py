@@ -128,6 +128,7 @@ class AGraph(Equation):
         # self._needs_opt
         # self._modified
         self._init_command_array_and_const(equation)
+        self._valid_parameters = None
 
     # pylint: disable=attribute-defined-outside-init
     def _init_command_array_and_const(self, equation):

@@ -64,7 +64,7 @@ class AGraphGenerator(Generator):
             new random acyclic graph individual
         """
         individual = self._backend_generator_function()
-        individual.command_array = self._create_command_array()
+        individual._valid_parameters, individual.command_array = self._create_command_array()
         return individual
 
     def _python_generator_function(self):
@@ -80,19 +80,25 @@ class AGraphGenerator(Generator):
         command_array = np.empty((self.agraph_size, 3), dtype=int)
         commands_to_generate = self.agraph_size
         i = 0
+
+        valid_parameters = np.array([0])
+
         while commands_to_generate > 0:
 
-            new_command = self.component_generator.random_command_w_eq(i)
+            equ_command, new_command = self.component_generator.random_command_w_eq(
+                                                                    i, valid_parameters)
             attempts = 0
             while commands_to_generate < new_command.shape[0]:
                 if attempts > 99:
                     raise RuntimeError("Couldn't generate small enough agraph command")
                 attempts += 1
-                new_command = self.component_generator.random_command_w_eq(i)
-
+                equ_command, new_command = self.component_generator.random_command_w_eq(
+                                                                        i, valid_parameters)
             if new_command.ndim == 1:
                 new_command = new_command.reshape((1,-1))
             command_array[i : i + new_command.shape[0]] = new_command
             commands_to_generate -= new_command.shape[0]
             i += new_command.shape[0]
-        return command_array
+            if i > 1:
+                valid_parameters = np.append(valid_parameters, i-1)
+        return valid_parameters, command_array

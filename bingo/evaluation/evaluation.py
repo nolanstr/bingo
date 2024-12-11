@@ -37,11 +37,17 @@ class Evaluation:
     eval_count : int
         the number of fitness function evaluations that have occurred
     """
-    def __init__(self, fitness_function, redundant=False, multiprocess=False):
+    def __init__(self, fitness_function, redundant=False, multiprocess=False,
+                                                            subsample=False):
         self.fitness_function = fitness_function
         self._redundant = redundant
         self._multiprocess = multiprocess
         self._eval_success = []
+        self._subsample = subsample
+        if self._subsample:
+            self._n = self.fitness_function.training_data.y.shape[0]
+            self._full_y = self.fitness_function.training_data.y.copy()
+            self._full_x = self.fitness_function.training_data.x.copy()
 
     @property
     def eval_count(self):
@@ -60,17 +66,15 @@ class Evaluation:
         population : list of chromosomes
                      population for which fitness should be calculated
         """
-        try:
-            if self.fitness_function._random_sample_subsets is not False:
-                self.fitness_function.randomize_subsets()
-        except:
-            pass
+        if self._subsample:
+            idxs = np.random.choice(self._n, self._subsample, replace=False)
+            self.fitness_function.training_data._x = self._full_x[idxs]
+            self.fitness_function.training_data._y = self._full_y[idxs]
 
         if self._multiprocess:
             self._multiprocess_eval(population)
         else:
             self._serial_eval(population)
-
         self.check_eval_success(population)
 
     def check_eval_success(self, population):
@@ -88,8 +92,6 @@ class Evaluation:
         for indv in population:
             if self._redundant or not indv.fit_set:
                 indv.fitness = self.fitness_function(indv)
-                #if np.isnan(indv.fitness):
-                #    import pdb;pdb.set_trace()
 
     def _multiprocess_eval(self, population):
         num_procs = self._multiprocess if isinstance(self._multiprocess, int) \
@@ -97,21 +99,27 @@ class Evaluation:
         with Pool(processes=num_procs) as pool:
             results = []
             for i, indv in enumerate(population):
-                if self._redundant or not indv.fit_set:
-                    results.append(
-                            pool.apply_async(_fitness_job,
-                                             (indv, self.fitness_function, i)))
-            for res in results:
+                #if self._redundant or not indv.fit_set:
+                results.append(
+                            pool.apply_async(_fitness_job_check,
+                                     (indv, self.fitness_function, i, self._redundant)))
 
+            for res in results:
                 if len(res.get()) == 3:
                     indv, _, i = res.get()
                 else:
                     indv, i = res.get()
                 population[i] = indv
- 
-def _fitness_job(individual, fitness_function, population_index):
-    individual.fitness = fitness_function(individual)
+
+def _fitness_job_check(individual, fitness_function, population_index,
+        redundant):
+    if redundant or (not individual.fit_set):
+        individual.fitness = fitness_function(individual)
     return individual, population_index
+
+#def _fitness_job(individual, fitness_function, population_index):
+#    individual.fitness = fitness_function(individual)
+#    return individual, population_index
 
 #def _fitness_job(individual, fitness_function, population_index):
 #    print("Population index", population_index)
